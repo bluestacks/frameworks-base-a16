@@ -333,6 +333,15 @@ public final class HintManagerService extends SystemService {
             } catch (RemoteException e) {
                 throw new IllegalStateException("Could not contact PowerHAL!", e);
             }
+        } else {
+            // BS-A16 / 7AQ: No Power HAL on BST -> build a default (unsupported)
+            // SupportInfo so the service still publishes as an inert stub and
+            // mSupportInfo is never null. createHintSession throws
+            // UnsupportedOperationException (isHintSessionSupported()==false),
+            // which Chrome's ADPF path tolerates (proceeds without hints).
+            mSupportInfo = new SupportInfo();
+            mSupportInfo.headroom = new SupportInfo.HeadroomSupportInfo();
+            mSupportInfo.compositionData = new SupportInfo.CompositionDataSupportInfo();
         }
         if (mSupportInfo.headroom.isCpuSupported) {
             mCpuHeadroomCache = new HeadroomCache<>(2, mSupportInfo.headroom.cpuMinIntervalMillis);

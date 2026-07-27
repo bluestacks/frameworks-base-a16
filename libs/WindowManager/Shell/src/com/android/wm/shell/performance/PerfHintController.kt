@@ -44,16 +44,14 @@ class PerfHintController(private val mContext: Context,
 
     private fun onInit() {
         mShellCommandHandler.addDumpCallback(this::dump, this)
-        val perfHintMgr = mContext.getSystemService(PerformanceHintManager::class.java)
-        if (perfHintMgr != null) {
-            val adpfSession = perfHintMgr.createHintSession(
-                intArrayOf(Process.myTid()),
-                TimeUnit.SECONDS.toNanos(1)
-            )
-            if (adpfSession != null) {
-                hinter.setAdpfSession(adpfSession)
-            }
-        }
+        // BS-A16 / 7AO: getSystemService(PerformanceHintManager) natively calls
+        // waitForService("performance_hint"), which blocks FOREVER on BST because the
+        // performance_hint HAL is absent. onInit runs on wmshell.main during Shell init,
+        // so this froze the Shell main looper and starved ALL posted work - including
+        // transitions' requestStartTransition - leaving standard-task windows hidden.
+        // ADPF session setup is optional (was null-checked) and BST does not need ADPF,
+        // so skip acquiring PerformanceHintManager. (A proper performance_hint HAL stub
+        // would be the comprehensive fix.) Root fix for 7AO.
     }
 
     fun dump(pw: PrintWriter, prefix: String?) {
