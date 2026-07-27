@@ -315,6 +315,10 @@ import com.android.server.webkit.WebViewUpdateService;
 import com.android.server.wm.ActivityTaskManagerService;
 import com.android.server.wm.WindowManagerGlobalLock;
 import com.android.server.wm.WindowManagerService;
+import com.bluestacks.server.BstFilterAppsService;
+import com.bluestacks.os.BstHostCallManager;
+import com.bluestacks.server.BstHostCallService;
+import com.bluestacks.server.BstUtilsService;
 
 import dalvik.system.VMDebug;
 import dalvik.system.VMRuntime;
@@ -508,6 +512,7 @@ public final class SystemServer implements Dumpable {
     // TODO: remove all of these references by improving dependency resolution and boot phases
     private PowerManagerService mPowerManagerService;
     private ActivityManagerService mActivityManagerService;
+    private BstUtilsService mBstUtilsService;
     private UserManagerService mUserManagerService;
     private WindowManagerGlobalLock mWindowManagerGlobalLock;
     private WebViewUpdateService mWebViewUpdateService;
@@ -1255,10 +1260,12 @@ public final class SystemServer implements Dumpable {
         startIStatsService();
         t.traceEnd();
 
-        // Start MemtrackProxyService before ActivityManager, so that early calls
-        // to Memtrack::getMemory() don't fail.
-        t.traceBegin("MemtrackProxyService");
-        startMemtrackProxyService();
+// Start MemtrackProxyService before ActivityManager, so that early calls
+// to Memtrack::getMemory() don't fail.
+t.traceBegin("MemtrackProxyService");
+        // BS-A16: memtrack HAL not available, skip to avoid native blocking
+        // (Watchdog kills system_server after 65s in MemtrackProxyService)
+        // startMemtrackProxyService();
         t.traceEnd();
 
         // Start AccessCheckingService which provides new implementation for permission and app op.
@@ -1309,6 +1316,20 @@ public final class SystemServer implements Dumpable {
         // initialize power management features.
         t.traceBegin("InitPowerManagement");
         mActivityManagerService.initPowerManagement();
+        t.traceEnd();
+
+        t.traceBegin("StartBstFilterAppsService");
+        ServiceManager.addService(Context.BST_FILTER_APPS, new BstFilterAppsService(mSystemContext));
+        t.traceEnd();
+
+        t.traceBegin("StartBstUtilsService");
+        mBstUtilsService = new BstUtilsService(mSystemContext);
+        ServiceManager.addService(Context.BST_UTILS, mBstUtilsService);
+        t.traceEnd();
+
+        t.traceBegin("StartBstHostCallService");
+        ServiceManager.addService(Context.BST_HOST_CALL, new BstHostCallService(mSystemContext));
+
         t.traceEnd();
 
         // Bring up recovery system in case a rescue party needs a reboot
@@ -1731,6 +1752,7 @@ public final class SystemServer implements Dumpable {
 
             t.traceBegin("SetWindowManagerService");
             mActivityManagerService.setWindowManager(wm);
+            mBstUtilsService.setWindowManager(wm);
             t.traceEnd();
 
             t.traceBegin("WindowManagerServiceOnInitReady");
@@ -2777,6 +2799,10 @@ public final class SystemServer implements Dumpable {
                 t.traceEnd();
             }
 
+            // BS-A16: restore BiometricService startup (align A13 SystemServer:2493). It was
+            // commented out before because gatekeeperd (late_start) was unavailable; gatekeeperd is
+            // now fixed/running. Not starting it leaves AuthService.mBiometricService=null ->
+            // canAuthenticate NPE -> GMS/Play Store crash loop. onStart publishes immediately, does not block gatekeeperd.
             // Start this service after all biometric sensor services are started.
             t.traceBegin("StartBiometricService");
             mSystemServiceManager.startService(BiometricService.class);

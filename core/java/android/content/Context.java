@@ -4982,6 +4982,36 @@ public abstract class Context {
     public static final String ACCOUNT_SERVICE = "account";
 
     /**
+     * Use with {@link #getSystemService} to retrieve a
+     * {@link com.bluestacks.os.BstUtilsManager}.
+     *
+     * @see #getSystemService
+     * @see com.bluestacks.os.BstUtilsManager
+     * @hide
+     */
+    public static final String BST_UTILS = "bstutils";
+
+    /**
+     * Use with {@link #getSystemService} to retrieve a
+     * {@link com.bluestacks.os.BstFilterAppsManager}.
+     *
+     * @see #getSystemService
+     * @see com.bluestacks.os.BstFilterAppsManager
+     * @hide
+     */
+    public static final String BST_FILTER_APPS = "bstfilterapps";
+
+    /**
+     * Use with {@link #getSystemService} to access the
+     * {@link com.bluestacks.os.BstHostCallManager}.
+     *
+     * @hide
+     * @see #getSystemService
+     * @see com.bluestacks.os.BstHostCallManager
+     */
+    public static final String BST_HOST_CALL = "bsthostcall";
+
+    /**
      * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.app.ActivityManager} for interacting with the global
      * system state.

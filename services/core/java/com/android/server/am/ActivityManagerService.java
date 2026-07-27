@@ -18172,6 +18172,14 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         @Override
+        public int mapIsolatedUid(int isolatedUid) {
+            final BatteryStatsImpl bstats = mBatteryStatsService.getActiveStatistics();
+            synchronized (bstats) {
+                return bstats.bstMapUid(isolatedUid);
+            }
+        }
+
+        @Override
         public boolean startForegroundServiceDelegate(
                 @NonNull ForegroundServiceDelegationOptions options,
                 @Nullable ServiceConnection connection) {

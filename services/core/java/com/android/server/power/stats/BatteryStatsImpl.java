@@ -4644,6 +4644,12 @@ public class BatteryStatsImpl extends BatteryStats {
         return mPowerStatsUidResolver.mapUid(uid);
     }
 
+    /** @hide BlueStacks */
+    @GuardedBy("this")
+    public int bstMapUid(int uid) {
+        return mapIsolatedUid(uid);
+    }
+
     @GuardedBy("this")
     public void noteEventLocked(int code, String name, int uid,
             long elapsedRealtimeMs, long uptimeMs) {

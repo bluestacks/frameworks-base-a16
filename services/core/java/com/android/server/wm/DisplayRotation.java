@@ -798,6 +798,12 @@ public class DisplayRotation {
         }
     }
 
+    /** @hide BlueStacks */
+    public void setBstProposedRotation(int proposedRotation) {
+        setUserRotation(WindowManagerPolicy.USER_ROTATION_LOCKED, proposedRotation, "bst");
+        dispatchProposedRotation(proposedRotation);
+    }
+
     /**
      * Sets the user rotation and updates the {@link RotationLockHistory}.
      *

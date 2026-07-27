@@ -25,6 +25,13 @@ import static android.service.chooser.Flags.interactiveChooser;
 
 import android.accounts.AccountManager;
 import android.accounts.IAccountManager;
+
+import com.bluestacks.os.BstFilterAppsManager;
+import com.bluestacks.os.BstHostCallManager;
+import com.bluestacks.os.BstUtilsManager;
+import com.bluestacks.os.IBstFilterAppsService;
+import com.bluestacks.os.IBstHostCallService;
+import com.bluestacks.os.IBstUtilsService;
 import android.adservices.AdServicesFrameworkInitializer;
 import android.annotation.FlaggedApi;
 import android.annotation.NonNull;
@@ -382,6 +389,37 @@ public final class SystemServiceRegistry {
                 IBinder b = ServiceManager.getServiceOrThrow(Context.ACCOUNT_SERVICE);
                 IAccountManager service = IAccountManager.Stub.asInterface(b);
                 return new AccountManager(ctx, service);
+            }});
+
+        registerService(Context.BST_UTILS, BstUtilsManager.class,
+                new CachedServiceFetcher<BstUtilsManager>() {
+            @Override
+            public BstUtilsManager createService(ContextImpl ctx) {
+                IBinder b = ServiceManager.getService(Context.BST_UTILS);
+                IBstUtilsService bstutils = IBstUtilsService.Stub.asInterface(b);
+                return new BstUtilsManager(ctx, bstutils);
+            }});
+
+        registerService(Context.BST_FILTER_APPS, BstFilterAppsManager.class,
+                new CachedServiceFetcher<BstFilterAppsManager>() {
+            @Override
+            public BstFilterAppsManager createService(ContextImpl ctx) {
+                IBinder b = ServiceManager.getService(Context.BST_FILTER_APPS);
+                IBstFilterAppsService bstfilterapps = IBstFilterAppsService.Stub.asInterface(b);
+                return new BstFilterAppsManager(ctx, bstfilterapps);
+            }});
+
+        registerService(Context.BST_HOST_CALL, BstHostCallManager.class,
+                new CachedServiceFetcher<BstHostCallManager>() {
+            @Override
+            public BstHostCallManager createService(ContextImpl ctx) {
+                IBinder b = ServiceManager.getService(Context.BST_HOST_CALL);
+                IBstHostCallService bstHostCallService = IBstHostCallService.Stub.asInterface(b);
+                if (bstHostCallService == null) {
+                    Log.wtf(TAG, "Failed to get BlueStacks HostCall service.");
+                    return null;
+                }
+                return new BstHostCallManager(ctx, bstHostCallService);
             }});
 
         registerService(Context.ACTIVITY_SERVICE, ActivityManager.class,

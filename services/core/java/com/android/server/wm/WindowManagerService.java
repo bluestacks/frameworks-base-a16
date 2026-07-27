@@ -370,6 +370,7 @@ import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.policy.WindowManagerPolicy.ScreenOffListener;
 import com.android.server.power.ShutdownThread;
 import com.android.server.utils.PriorityDump;
+import com.bluestacks.os.BstHostCallManager;
 import com.android.window.flags.Flags;
 
 import dalvik.annotation.optimization.NeverCompile;
@@ -1134,6 +1135,7 @@ public class WindowManagerService extends IWindowManager.Stub
     final DisplayManager mDisplayManager;
     @NonNull
     final ActivityTaskManagerService mAtmService;
+    final BstHostCallManager mBstHostCallManagerService;
 
     /** Indicates whether this device supports wide color gamut / HDR rendering */
     private boolean mHasWideColorGamutSupport;
@@ -1314,6 +1316,7 @@ public class WindowManagerService extends IWindowManager.Stub
         installLock(this, INDEX_WINDOW);
         mGlobalLock = atm.getGlobalLock();
         mAtmService = atm;
+        mBstHostCallManagerService = (BstHostCallManager) context.getSystemService(Context.BST_HOST_CALL);
         mContext = context;
         mFlags = new WindowManagerFlags();
         mIsPc = mContext.getPackageManager().hasSystemFeature(FEATURE_PC);
@@ -4161,6 +4164,11 @@ public class WindowManagerService extends IWindowManager.Stub
         mPolicy.onSystemUiStarted();
     }
 
+    /** @hide BlueStacks */
+    public void setBstProposedRotation(int proposedRotation) {
+        mPolicy.setBstProposedRotation(proposedRotation);
+    }
+
     private void performEnableScreen() {
         synchronized (mGlobalLock) {
             ProtoLog.i(WM_DEBUG_BOOT, "performEnableScreen: mDisplayEnabled=%b"
@@ -6841,6 +6849,54 @@ public class WindowManagerService extends IWindowManager.Stub
     /** Note that Locked in this case is on mLayoutToAnim */
     void scheduleAnimationLocked() {
         mAnimator.scheduleAnimation();
+    }
+
+    void bstSendTopDisplayedOnFocusChange(WindowState newFocus) {
+        String lastTopDisplayedPackage = SystemProperties.get("bst.config.top_displayed_pkg", "");
+        String packageName = newFocus.getOwningPackage();
+        ActivityRecord activityRecord = newFocus.mActivityRecord;
+        if (activityRecord == null) {
+            if (DEBUG_VISIBILITY) Slog.d(TAG, "activityRecord is null so returning");
+            return;
+        }
+
+        String activityRecordStr = activityRecord.toString();
+        String[] splitsAppToken = activityRecordStr.split(" ");
+
+        if (splitsAppToken.length < 4) {
+            Slog.e(TAG, "activityRecord is invalid, activityRecordStr: " + activityRecordStr);
+            return;
+        }
+
+        String componentName = splitsAppToken[2].trim();
+        if (componentName.endsWith("}")) {
+            componentName = componentName.substring(0, componentName.length() - 1);
+        }
+
+        if (packageName == null) {
+            if (DEBUG_VISIBILITY) Slog.d(TAG, "packageName is null, parsing activityRecord");
+            packageName = componentName.substring(0, componentName.indexOf("/")).trim();
+        }
+
+        String activityName = componentName.substring(
+                componentName.indexOf("/") + 1, componentName.length()).trim();
+        if (activityName.startsWith(".")) {
+            activityName = packageName + activityName;
+        }
+        if (packageName.length() > SystemProperties.PROP_VALUE_MAX)
+            packageName = packageName.substring(0, SystemProperties.PROP_VALUE_MAX);
+
+        if (packageName != null && !packageName.equalsIgnoreCase(lastTopDisplayedPackage)
+                && activityName != null
+                && !activityName.equalsIgnoreCase("com.android.settings.FallbackHome")) {
+            Slog.d(TAG, "calling BstHostCallManagerService onActivityDisplayed, packageName: "
+                    + packageName + ", activityName: " + activityName);
+            SystemProperties.set("bst.config.top_displayed_pkg", packageName);
+            String callingPackage = SystemProperties.get("bst.config.calling_package", "");
+            int rval = mBstHostCallManagerService.onActivityDisplayed(
+                    packageName, activityName, callingPackage);
+            Slog.d(TAG, "BstHostCallManagerService onActivityDisplayed returned: " + rval);
+        }
     }
 
     boolean updateFocusedWindowLocked(int mode, boolean updateInputWindows) {
