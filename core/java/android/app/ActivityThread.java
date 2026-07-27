@@ -8853,6 +8853,11 @@ public final class ActivityThread extends ClientTransactionHandler
 
     private ProviderClientRecord installProviderAuthoritiesLocked(IContentProvider provider,
             ContentProvider localProvider, ContentProviderHolder holder) {
+        if (holder.info.authority == null) {
+            Slog.w(TAG, "Provider " + holder.info.name
+                    + " has a null authority; skipping authority registration");
+            return new ProviderClientRecord(new String[0], provider, localProvider, holder);
+        }
         final String auths[] = holder.info.authority.split(";");
         final int userId = UserHandle.getUserId(holder.info.applicationInfo.uid);
 
