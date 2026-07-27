@@ -699,6 +699,12 @@ public class LockPatternUtils {
      */
     @UnsupportedAppUsage
     public boolean isLockScreenDisabled(int userId) {
+        // BS-A16: BlueStacks is a desktop emulator with no lock screen.
+        // Ported from A13 (commit forces lockscreen always disabled).
+        // Without this, SystemUI shows the keyguard shade at boot, which steals
+        // window focus from the launcher and blocks the HCALL onActivityDisplayed
+        // hook from firing -> HD-Player shows no picture until manual dismiss.
+        /*
         if (isSecure(userId)) {
             return false;
         }
@@ -710,6 +716,8 @@ public class LockPatternUtils {
         return getBoolean(DISABLE_LOCKSCREEN_KEY, false, userId)
                 || disabledByDefault
                 || isDemoUser;
+        */
+        return true;
     }
 
     /**

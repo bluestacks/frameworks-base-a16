@@ -1972,19 +1972,23 @@ class PermissionService(private val service: AccessCheckingService) :
     }
 
     override fun addOnPermissionsChangeListener(listener: IOnPermissionsChangeListener) {
-        context.enforceCallingOrSelfPermission(
-            Manifest.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS,
-            "addOnPermissionsChangeListener",
-        )
+        // BS-A16: Skip OBSERVE_GRANT_REVOKE_PERMISSIONS check for GMS compatibility.
+        // GMS (Google Play Services) calls this internally but can't hold this
+        // signature-level permission on A16. Skipping avoids SecurityException crash.
+        // context.enforceCallingOrSelfPermission(
+        //     Manifest.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS,
+        //     "addOnPermissionsChangeListener",
+        // )
 
         onPermissionsChangeListeners.addListener(listener)
     }
 
     override fun removeOnPermissionsChangeListener(listener: IOnPermissionsChangeListener) {
-        context.enforceCallingOrSelfPermission(
-            Manifest.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS,
-            "removeOnPermissionsChangeListener",
-        )
+        // BS-A16: Skip same check as above.
+        // context.enforceCallingOrSelfPermission(
+        //     Manifest.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS,
+        //     "removeOnPermissionsChangeListener",
+        // )
 
         onPermissionsChangeListeners.removeListener(listener)
     }

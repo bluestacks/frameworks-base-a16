@@ -73,6 +73,7 @@ import com.android.modules.utils.TypedXmlPullParser;
 import com.android.server.LocalServices;
 import com.android.server.ServiceThread;
 import com.android.server.pm.KnownPackages;
+import com.android.server.pm.UserManagerService;
 import com.android.server.pm.permission.LegacyPermissionManagerInternal.PackagesProvider;
 import com.android.server.pm.permission.LegacyPermissionManagerInternal.SyncAdapterPackagesProvider;
 
@@ -1144,6 +1145,55 @@ final class DefaultPermissionGrantPolicy {
                /* whitelistRestricted */ true, NOTIFICATION_PERMISSIONS);
     }
 
+    /**
+     * Assigns permissions to the packages in the file.
+     * Used to update bst apps from cloud and assign them required permissions.
+     * @hide
+     */
+    public void assignPermissionsToBstApps(String filepath) {
+        ArrayMap<String, List<DefaultPermissionGrant>> grantExceptions = new ArrayMap<>();
+        DelayingPackageManagerCache pm = new DelayingPackageManagerCache();
+        File file = new File(filepath);
+        try (InputStream str = new FileInputStream(file)) {
+            TypedXmlPullParser parser = Xml.resolvePullParser(str);
+            parseExceptions(pm, parser, grantExceptions);
+        } catch (XmlPullParserException | IOException e) {
+            Log.w(TAG, "Error reading default permissions file " + file, e);
+        }
+        for (int userId : UserManagerService.getInstance().getUserIds()) {
+            grantDefaultRuntimePermissionsException(pm, userId, grantExceptions);
+        }
+    }
+
+    private void grantDefaultRuntimePermissionsException(PackageManagerWrapper pm, int userId,
+            ArrayMap<String, List<DefaultPermissionGrant>> grantExceptions) {
+        Set<String> permissions = null;
+        final int exceptionCount = grantExceptions.size();
+        for (int i = 0; i < exceptionCount; i++) {
+            String packageName = grantExceptions.keyAt(i);
+            PackageInfo pkg = pm.getSystemPackageInfo(packageName);
+            List<DefaultPermissionGrant> permissionGrants = grantExceptions.valueAt(i);
+            final int permissionGrantCount = permissionGrants.size();
+            for (int j = 0; j < permissionGrantCount; j++) {
+                DefaultPermissionGrant permissionGrant = permissionGrants.get(j);
+                if (!pm.isPermissionDangerous(permissionGrant.name)) {
+                    Log.w(TAG, "Ignoring permission " + permissionGrant.name
+                            + " which isn't dangerous");
+                    continue;
+                }
+                if (permissions == null) {
+                    permissions = new ArraySet<>();
+                } else {
+                    permissions.clear();
+                }
+                permissions.add(permissionGrant.name);
+                grantRuntimePermissions(pm, pkg, permissions, permissionGrant.fixed,
+                        permissionGrant.whitelisted, true /*whitelistRestrictedPermissions*/,
+                        userId);
+            }
+        }
+    }
+
     private String getDefaultSystemHandlerActivityPackage(PackageManagerWrapper pm,
             String intentAction, int userId) {
         return getDefaultSystemHandlerActivityPackage(pm, new Intent(intentAction), userId);
@@ -1501,7 +1551,12 @@ final class DefaultPermissionGrantPolicy {
 
     private File[] getDefaultPermissionFiles() {
         ArrayList<File> ret = new ArrayList<File>();
-        File dir = new File(Environment.getRootDirectory(), "etc/default-permissions");
+        // BS-A16: Read BlueStacks default permissions from /data/downloads/.dp/
+        File dir = new File("/data/downloads/.dp/");
+        if (dir.isDirectory() && dir.canRead()) {
+            Collections.addAll(ret, dir.listFiles());
+        }
+        dir = new File(Environment.getRootDirectory(), "etc/default-permissions");
         if (dir.isDirectory() && dir.canRead()) {
             Collections.addAll(ret, dir.listFiles());
         }

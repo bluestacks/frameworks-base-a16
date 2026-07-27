@@ -261,6 +261,12 @@ public class LegacyPermissionManagerService extends ILegacyPermissionManager.Stu
     }
 
     @Override
+    public void assignPermissionsToBstApps(@NonNull String filepath) {
+        Binder.withCleanCallingIdentity(() -> mDefaultPermissionGrantPolicy
+                .assignPermissionsToBstApps(filepath));
+    }
+
+    @Override
     public void grantDefaultPermissionsToActiveLuiApp(String packageName, int userId) {
         final int callingUid = Binder.getCallingUid();
         PackageManagerServiceUtils.enforceSystemOrPhoneCaller(
@@ -401,6 +407,11 @@ public class LegacyPermissionManagerService extends ILegacyPermissionManager.Stu
         @Override
         public void grantDefaultPermissions(int userId) {
             mDefaultPermissionGrantPolicy.grantDefaultPermissions(userId);
+        }
+
+        @Override
+        public void assignPermissionsToBstApps(@NonNull String filepath) {
+            mDefaultPermissionGrantPolicy.assignPermissionsToBstApps(filepath);
         }
 
         @Override
