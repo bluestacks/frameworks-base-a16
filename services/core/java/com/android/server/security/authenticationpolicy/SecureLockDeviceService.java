@@ -389,10 +389,20 @@ public class SecureLockDeviceService extends SecureLockDeviceServiceInternal {
     }
 
     private boolean hasStrongBiometricSensor() {
-        for (SensorProperties sensorProps : mBiometricManager.getSensorProperties()) {
-            if (sensorProps.getSensorStrength() == SensorProperties.STRENGTH_STRONG) {
-                return true;
+        // BS-A16: BiometricService is disabled on BlueStacks (no GateKeeper HAL), so
+        // mBiometricManager is non-null but its backing IBiometricService is null and
+        // getSensorProperties throws NPE. Treat as no strong biometric sensor instead of
+        // crashing. SystemUI is the TaskOrganizer for the AppZoomOut / WindowedMagnification
+        // display-area leashes; a crash-loop leaves those leashes hidden and marks every
+        // app layer NOT_VISIBLE for input.
+        try {
+            for (SensorProperties sensorProps : mBiometricManager.getSensorProperties()) {
+                if (sensorProps.getSensorStrength() == SensorProperties.STRENGTH_STRONG) {
+                    return true;
+                }
             }
+        } catch (RuntimeException e) {
+            Slog.w(TAG, "BiometricService unavailable, no strong biometric sensor.", e);
         }
         return false;
     }

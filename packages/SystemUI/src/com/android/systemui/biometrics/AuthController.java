@@ -886,11 +886,21 @@ public class AuthController implements
 
     @Override
     public void setBiometricContextListener(IBiometricContextListener listener) {
-        if (mBiometricContextListenerJob != null) {
-            mBiometricContextListenerJob.cancel(null);
-        }
-        mBiometricContextListenerJob =
-                mLogContextInteractor.get().addBiometricContextListener(listener);
+        // BS-A16: Skip biometric context listener registration.
+        // BlueStacks has no biometric hardware (fingerprint/face) and
+        // BiometricService is disabled in SystemServer (no GateKeeper HAL).
+        // The listener registration triggers SecureLockDeviceRepositoryImpl
+        // -> AuthenticationPolicyManager -> SecureLockDeviceService
+        // -> hasStrongBiometricSensor() -> getSensorProperties() -> NPE
+        // (IBiometricService is null). This NPE crashes SystemUI which is
+        // the TaskOrganizer for AppZoomOut/WindowedMagnification leashes,
+        // causing all app layers to be hidden-by-parent and blocking input.
+        // Ported from A13 behavior (A13 already has this workaround applied).
+        // if (mBiometricContextListenerJob != null) {
+        //     mBiometricContextListenerJob.cancel(null);
+        // }
+        // mBiometricContextListenerJob =
+        //         mLogContextInteractor.get().addBiometricContextListener(listener);
     }
 
     /**
