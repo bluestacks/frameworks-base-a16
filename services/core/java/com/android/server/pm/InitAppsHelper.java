@@ -261,6 +261,8 @@ final class InitAppsHelper {
 
         scanDirTracedLI(mPm.getAppInstallDir(), 0,
                 mScanFlags | SCAN_REQUIRE_KNOWN, packageParser, mExecutorService, null);
+         // BS-A16: priv-downloads/downloads moved to scanSystemDirs (system phase, before /data/app);
+         // otherwise BST preloads upgraded into /data/app are not recognized as UPDATED_SYSTEM_APP -> lose SYSTEM/permissions.
 
         List<Runnable> unfinishedTasks = mExecutorService.shutdownNow();
         if (!unfinishedTasks.isEmpty()) {
@@ -387,6 +389,18 @@ final class InitAppsHelper {
                     mSystemScanFlags | partition.scanFlag, packageParser, executorService,
                     partition.apexInfo);
         }
+
+         // BS-A16 (align A13): scan priv-downloads/downloads in the system phase (before /data/app),
+         // registering them as system/privileged packages so BST preloads upgraded into /data/app are
+         // recognized as UPDATED_SYSTEM_APP, keeping the SYSTEM flag and privapp permissions (MANAGE_USERS etc.). Otherwise Play Store crashes after self-upgrade.
+        final File blueStacksPrivAppDir = new File(Environment.getDataDirectory(),
+                "priv-downloads");
+        collectScanParams(scanParamsList, blueStacksPrivAppDir, mSystemParseFlags,
+                mSystemScanFlags | SCAN_AS_PRIVILEGED, packageParser, executorService, null);
+        final File blueStacksAppDir = new File(Environment.getDataDirectory(),
+                "downloads");
+        collectScanParams(scanParamsList, blueStacksAppDir, mSystemParseFlags,
+                mSystemScanFlags | SCAN_AS_SYSTEM, packageParser, executorService, null);
 
         // Scan all directories with the parameters contained in scanParamsList.
         parallelScanDirTracedLI(scanParamsList, packageParser, executorService);
