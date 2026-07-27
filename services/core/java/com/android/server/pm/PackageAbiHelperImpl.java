@@ -544,7 +544,15 @@ final class PackageAbiHelperImpl implements PackageAbiHelper {
                 && pkg.isExtractNativeLibrariesRequested();
         // We shouldn't attempt to extract libs from system app when it was not updated.
         if (isSystemApp && !isUpdatedSystemApp) {
-            extractLibs = false;
+            // BS-A16: ROB-14090 - Force extract native libs for uncube launcher3.
+            // The launcher uses compressed native libs; extraction is required even
+            // though it is a system app. Without this, libflutter.so is not extracted
+            // to /data/downloads/com.uncube.launcher3/lib/x86_64/ -> UnsatisfiedLinkError.
+            if (pkg.getPackageName().equals("com.uncube.launcher3")) {
+                extractLibs = true;
+            } else {
+                extractLibs = false;
+            }
         }
         return extractLibs;
     }
