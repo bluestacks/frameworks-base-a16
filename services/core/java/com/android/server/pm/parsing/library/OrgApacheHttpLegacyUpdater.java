@@ -39,11 +39,11 @@ public class OrgApacheHttpLegacyUpdater extends PackageSharedLibraryUpdater {
     @Override
     public void updatePackage(ParsedPackage parsedPackage, boolean isSystemApp,
             boolean isUpdatedSystemApp) {
-        // Packages targeted at <= O_MR1 expect the classes in the org.apache.http.legacy library
-        // to be accessible so this maintains backward compatibility by adding the
-        // org.apache.http.legacy library to those packages.
-        if (apkTargetsApiLevelLessThanOrEqualToOMR1(parsedPackage)) {
-            prefixRequiredLibrary(parsedPackage, ORG_APACHE_HTTP_LEGACY);
-        }
+        // BS-A16: Always add org.apache.http.legacy to every package.
+        // A14+ class loader restricts this library for targetSdk>=34 apps.
+        // GMS, Play Store, and many Google system apps need HttpClient classes
+        // but do not declare <uses-library>. Instead of targeting specific
+        // packages, make it universally available like A13 behavior.
+        prefixRequiredLibrary(parsedPackage, ORG_APACHE_HTTP_LEGACY);
     }
 }
