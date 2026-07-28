@@ -60,6 +60,7 @@ Do NOT include any apps that are updatable via Play Store!
   <hidden-api-whitelisted-app package="com.android.systemui.plugins" />
   <hidden-api-whitelisted-app package="com.android.terminal" />
   <hidden-api-whitelisted-app package="com.android.wallpaper" />
+  <hidden-api-whitelisted-app package="com.bluestacks.home" />
   <hidden-api-whitelisted-app package="jp.co.omronsoft.openwnn" />
   <!-- TODO: Remove NetworkStack whitelisting -->
   <hidden-api-whitelisted-app package="com.android.networkstack" />

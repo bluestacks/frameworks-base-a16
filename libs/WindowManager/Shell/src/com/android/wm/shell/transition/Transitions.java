@@ -145,6 +145,7 @@ public class Transitions implements RemoteCallable<Transitions>,
             SystemProperties.getBoolean("persist.wm.debug.finish_shell_transition", false);
 
     /** Set to {@code true} to enable shell transitions. */
+    // A16DBG:P2:SHELL: re-enabled after android.hardware.power-service.example (performance_hint)
     public static final boolean ENABLE_SHELL_TRANSITIONS = true;
     public static final boolean SHELL_TRANSITIONS_ROTATION =
             SystemProperties.getBoolean("persist.wm.debug.shell_transit_rotate", false);
@@ -384,13 +385,16 @@ public class Transitions implements RemoteCallable<Transitions>,
                 new SettingsObserver());
 
         // Register this transition handler with Core
-        if (unifyShellBinders()) {
-            mOrganizer.initializeDependencies(this);
-        } else {
-            try {
-                mOrganizer.registerTransitionPlayer(mPlayerImpl);
-            } catch (RuntimeException e) {
-                throw e;
+        // TEMP(R262b) / BST bringup: gate TransitionPlayer on ENABLE_SHELL_TRANSITIONS
+        if (ENABLE_SHELL_TRANSITIONS) {
+            if (unifyShellBinders()) {
+                mOrganizer.initializeDependencies(this);
+            } else {
+                try {
+                    mOrganizer.registerTransitionPlayer(mPlayerImpl);
+                } catch (RuntimeException e) {
+                    throw e;
+                }
             }
         }
         // Pre-load the instance.

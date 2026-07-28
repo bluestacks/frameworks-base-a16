@@ -1,0 +1,21 @@
+cc_binary {
+    name: "pagefusion",
+
+    srcs: [
+	"PageFusion.cpp", 
+	"RTVboxGuest.cpp",
+	"util.cpp"
+	],
+
+    shared_libs: [
+        "libcutils",
+        "liblog"
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wunused",
+        "-Wunreachable-code",
+    ],
+}

@@ -130,6 +130,7 @@ import android.os.UserManager;
 import android.service.voice.IVoiceInteractionSession;
 import android.text.TextUtils;
 import android.util.Pools.SynchronizedPool;
+import android.util.BstUtils;
 import android.util.Slog;
 import android.widget.Toast;
 import android.window.RemoteTransition;
@@ -152,6 +153,8 @@ import com.android.server.wm.BackgroundActivityStartController.BalVerdict;
 import com.android.server.wm.LaunchParamsController.LaunchParams;
 import com.android.server.wm.TaskFragment.EmbeddingCheckResult;
 import com.android.window.flags.Flags;
+
+import com.bluestacks.os.BstHostCallManager;
 
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
@@ -285,6 +288,8 @@ class ActivityStarter {
     private long mLastStartActivityTimeMs;
     // The reason we were trying to start the last activity
     private String mLastStartReason;
+
+    private BstHostCallManager mBstHostCallManagerService;
 
     /*
      * Request details provided through setter methods. Should be reset after {@link #execute()}
@@ -1076,6 +1081,44 @@ class ActivityStarter {
         final int userId = aInfo != null && aInfo.applicationInfo != null
                 ? UserHandle.getUserId(aInfo.applicationInfo.uid) : 0;
         final int launchMode = aInfo != null ? aInfo.launchMode : 0;
+
+        // A16DBG:P2:FW-WM ActivityStarter — a13 hideBlueStacksPkg + optional GRM (kill-switch)
+        if (err == ActivityManager.START_SUCCESS && intent != null && intent.getComponent() != null) {
+            final String launchPkg = intent.getComponent().getPackageName();
+            try {
+                mService.mContext.getPackageManager().getPackageInfo(launchPkg, 0);
+                // GRM: default OFF (persist.bst.grm.launch_check=1 to match a13). Past Batch B Layer2 risk.
+                if (android.os.SystemProperties.getBoolean("persist.bst.grm.launch_check", false)) {
+                    boolean bstCheckGrm = (aInfo != null) ? !aInfo.applicationInfo.isSystemApp() : true;
+                    if (bstCheckGrm && callingPackage != null && launchPkg != null
+                            && !callingPackage.equals("com.bluestacks.BstCommandProcessor")
+                            && !callingPackage.equals(launchPkg)) {
+                        if (mBstHostCallManagerService == null) {
+                            mBstHostCallManagerService = (BstHostCallManager) mService.mContext
+                                    .getSystemService(android.content.Context.BST_HOST_CALL);
+                        }
+                        if (mBstHostCallManagerService != null
+                                && !mBstHostCallManagerService.isAppLaunchAllowed(launchPkg, false)) {
+                            Slog.i(TAG, "A16DBG:P2:FW-WM Show grm for pkg=" + launchPkg);
+                            return err; // a13 behavior
+                        }
+                    }
+                }
+            } catch (android.content.pm.PackageManager.NameNotFoundException e) {
+                Slog.w(TAG, "A16DBG:P2:FW-WM launchPkg=" + launchPkg + " not installed; skip GRM");
+            }
+            int bstUid = android.os.Binder.getCallingUid();
+            if (bstUid >= 10000) {
+                int bstPid = android.os.Binder.getCallingPid();
+                String callingApp = BstUtils.getAppNameFromPid(bstPid);
+                boolean isAppPrivileged = BstUtils.bstIsCallingAppPrivileged(bstUid, callingApp);
+                if (BstUtils.hideBlueStacksPkg(launchPkg, isAppPrivileged)) {
+                    Slog.i(TAG, "A16DBG:P2:FW-WM hideBlueStacksPkg pkg=" + launchPkg);
+                    return ActivityManager.START_CLASS_NOT_FOUND;
+                }
+            }
+        }
+
         if (err == ActivityManager.START_SUCCESS) {
             request.logMessage.append("START u").append(userId).append(" {")
                     .append(intent.toShortString(true, true, true, false))

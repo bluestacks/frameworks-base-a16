@@ -5905,6 +5905,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     }
 
+    @Override
+    public void setBstProposedRotation(int proposedRotation) {
+        mDefaultDisplayRotation.setBstProposedRotation(proposedRotation);
+    }
+
     void sendCloseSystemWindows() {
         PhoneWindow.sendCloseSystemWindows(mContext, null);
     }

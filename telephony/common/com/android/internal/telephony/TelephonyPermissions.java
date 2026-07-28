@@ -170,6 +170,9 @@ public final class TelephonyPermissions {
             Context context, int subId, int pid, int uid, String callingPackage,
             @Nullable  String callingFeatureId, String message) {
         try {
+            // A16DBG:P2:FW-PERIPH BST bypass READ_PRIVILEGED_PHONE_STATE for com.gamamobi.wog (a13)
+            if(callingPackage.equals("com.gamamobi.wog"))
+                return true;
             context.enforcePermission(
                     android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, pid, uid, message);
 
@@ -383,6 +386,10 @@ public final class TelephonyPermissions {
         if (allowCarrierPrivilegeOnAnySub && checkCarrierPrivilegeForAnySubId(context, uid)) {
             return true;
         }
+
+        // A16DBG:P2:FW-PERIPH BST bypass device-id check for com.bluestacks.devicedetails (a13)
+        if(callingPackage != null && callingPackage.equals("com.bluestacks.devicedetails"))
+            return true;
 
         LegacyPermissionManager permissionManager = (LegacyPermissionManager)
                 context.getSystemService(Context.LEGACY_PERMISSION_SERVICE);

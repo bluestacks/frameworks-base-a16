@@ -55,4 +55,6 @@ public class WindowManagerDebugConfig {
     static final boolean SHOW_STACK_CRAWLS = false;
     static final boolean DEBUG_WINDOW_CROP = false;
     static final boolean DEBUG_UNKNOWN_APP_VISIBILITY = false;
+
+    static final boolean BST_DEBUG_ORIENTATION = android.os.SystemProperties.getInt("bst.debug.orientation", 0) > 0 ? true : false;
 }

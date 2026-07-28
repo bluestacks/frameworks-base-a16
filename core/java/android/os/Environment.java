@@ -35,6 +35,8 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.os.storage.StorageManager;
 import android.os.storage.StorageVolume;
+import android.system.Os;
+import android.util.BstUtils;
 import android.provider.MediaStore;
 import android.ravenwood.annotation.RavenwoodKeepWholeClass;
 import android.ravenwood.annotation.RavenwoodRedirect;
@@ -50,6 +52,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+
+import com.bluestacks.os.IBstFilterAppsService;
 import java.util.UUID;
 
 /**
@@ -168,6 +172,10 @@ public class Environment {
     private static Boolean sLegacyStorageAppOp;
     private static Boolean sNoIsolatedStorageAppOp;
 
+    // A16DBG:P2:FW-CORE-APP-5 sdcard_emul (a13 cases 14080/12660)
+    private static final String SDCARD_EMUL_PATH = "/sdcard_emul";
+    private static boolean modifySdPathForFnCall = false;
+
     /**
      * On a real device, it's a no-op, but on ravenwood, it'll remap the path such that
      * it'll work on the Ravenwood environment, and also create the directory.
@@ -238,6 +246,40 @@ public class Environment {
             final StorageVolume[] volumes = StorageManager.getVolumeList(mUserId,
                     StorageManager.FLAG_FOR_WRITE);
             final File[] files = new File[volumes.length];
+
+            // A16DBG:P2:FW-CORE-APP-5 sdcard_emul path redirect (a13 cases 14080/12660, BS4-2783)
+            try {
+                int pid = Process.myPid();
+                String packageName = BstUtils.getAppNameFromPid(pid);
+                IBstFilterAppsService mBstFilter = IBstFilterAppsService.Stub.asInterface(
+                        ServiceManager.getService(Context.BST_FILTER_APPS));
+                File[] cachedOrigExternalPath = new File[1];
+                cachedOrigExternalPath[0] = volumes[0].getPathFile();
+
+                if (modifySdPathForFnCall && packageName != null
+                        && mBstFilter.isModifysdPathReqd(packageName)) {
+                    String emulatedExternalStorageDir = new StringBuilder(DIR_DATA)
+                            .append("/").append(packageName).append(SDCARD_EMUL_PATH).toString();
+                    files[0] = new File(DIR_ANDROID_DATA, emulatedExternalStorageDir);
+
+                    File emulatedObbPath = (buildPaths(files, DIR_ANDROID, DIR_OBB))[0];
+                    File actualObbPath = (buildPaths(cachedOrigExternalPath, DIR_ANDROID, DIR_OBB,
+                            packageName))[0];
+                    String[] actualObbPathFiles = actualObbPath.list();
+                    if (actualObbPathFiles != null && actualObbPathFiles.length > 0
+                            && !emulatedObbPath.exists()) {
+                        emulatedObbPath.mkdirs();
+                        File emulatedObbFullPath = new File(emulatedObbPath, packageName);
+                        Os.symlink(actualObbPath.toString(), emulatedObbFullPath.toString());
+                    }
+                    return files;
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "A16DBG:P2:FW-CORE-APP-5 isModifysdPathReqd: " + e.getMessage());
+            } finally {
+                modifySdPathForFnCall = false;
+            }
+
             for (int i = 0; i < volumes.length; i++) {
                 files[i] = volumes[i].getPathFile();
             }
@@ -259,6 +301,7 @@ public class Environment {
         }
 
         public File[] buildExternalStorageAndroidDataDirs() {
+            modifySdPathForFnCall = true;
             return buildPaths(getExternalDirs(), DIR_ANDROID, DIR_DATA);
         }
 
@@ -267,6 +310,7 @@ public class Environment {
         }
 
         public File[] buildExternalStorageAppDataDirs(String packageName) {
+            modifySdPathForFnCall = true;
             return buildPaths(getExternalDirs(), DIR_ANDROID, DIR_DATA, packageName);
         }
 
@@ -279,10 +323,12 @@ public class Environment {
         }
 
         public File[] buildExternalStorageAppFilesDirs(String packageName) {
+            modifySdPathForFnCall = true;
             return buildPaths(getExternalDirs(), DIR_ANDROID, DIR_DATA, packageName, DIR_FILES);
         }
 
         public File[] buildExternalStorageAppCacheDirs(String packageName) {
+            modifySdPathForFnCall = true;
             return buildPaths(getExternalDirs(), DIR_ANDROID, DIR_DATA, packageName, DIR_CACHE);
         }
     }
@@ -1369,7 +1415,15 @@ public class Environment {
      */
     @RavenwoodThrow(blockedBy = StorageManager.class)
     public static String getExternalStorageState(File path) {
-        final StorageVolume volume = StorageManager.getStorageVolume(path, UserHandle.myUserId());
+
+        StorageVolume volume = null;
+        // A16DBG:P2:FW-CORE-APP-5 SDCARD_EMUL_PATH storage query redirect (a13)
+        if (path.toString().contains(SDCARD_EMUL_PATH)) {
+            final File externalDir = sCurrentUser.getExternalDirs()[0];
+            volume = StorageManager.getStorageVolume(externalDir, UserHandle.myUserId());
+        } else {
+            volume = StorageManager.getStorageVolume(path, UserHandle.myUserId());
+        }
         if (volume != null) {
             return volume.getState();
         } else {
@@ -1403,7 +1457,15 @@ public class Environment {
      */
     @RavenwoodThrow(blockedBy = StorageManager.class)
     public static boolean isExternalStorageRemovable(@NonNull File path) {
-        final StorageVolume volume = StorageManager.getStorageVolume(path, UserHandle.myUserId());
+
+        StorageVolume volume = null;
+        // A16DBG:P2:FW-CORE-APP-5 SDCARD_EMUL_PATH storage query redirect (a13)
+        if (path.toString().contains(SDCARD_EMUL_PATH)) {
+            final File externalDir = sCurrentUser.getExternalDirs()[0];
+            volume = StorageManager.getStorageVolume(externalDir, UserHandle.myUserId());
+        } else {
+            volume = StorageManager.getStorageVolume(path, UserHandle.myUserId());
+        }
         if (volume != null) {
             return volume.isRemovable();
         } else {
@@ -1448,7 +1510,15 @@ public class Environment {
      */
     @RavenwoodThrow(blockedBy = StorageManager.class)
     public static boolean isExternalStorageEmulated(@NonNull File path) {
-        final StorageVolume volume = StorageManager.getStorageVolume(path, UserHandle.myUserId());
+
+        StorageVolume volume = null;
+        // A16DBG:P2:FW-CORE-APP-5 SDCARD_EMUL_PATH storage query redirect (a13)
+        if (path.toString().contains(SDCARD_EMUL_PATH)) {
+            final File externalDir = sCurrentUser.getExternalDirs()[0];
+            volume = StorageManager.getStorageVolume(externalDir, UserHandle.myUserId());
+        } else {
+            volume = StorageManager.getStorageVolume(path, UserHandle.myUserId());
+        }
         if (volume != null) {
             return volume.isEmulated();
         } else {

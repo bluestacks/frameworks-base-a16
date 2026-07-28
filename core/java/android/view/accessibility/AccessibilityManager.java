@@ -49,6 +49,7 @@ import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.content.res.Resources;
 import android.os.Binder;
+import android.util.BstUtils;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -959,6 +960,8 @@ public final class AccessibilityManager {
             services = mAccessibilityPolicy.getEnabledAccessibilityServiceList(
                     feedbackTypeFlags, services);
         }
+        // A16DBG:P2:FW-CORE-APP hide BST accessibility svcs from 3rd-party detection (a13)
+        services = BstUtils.filterHiddenServices(services, Binder.getCallingUid());
         if (services != null) {
             return Collections.unmodifiableList(services);
         } else {

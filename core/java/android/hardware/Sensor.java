@@ -1104,6 +1104,13 @@ public final class Sensor {
      * @return vendor string of this sensor.
      */
     public String getVendor() {
+        // sending fake sensor vendor info
+        // this is needed as some apps check for sensor vendor info
+        // to determine if they are running on real phone device or not
+        if (mVendor.toLowerCase().startsWith("bluestacks")) {
+            String bstVendor = Build.MANUFACTURER + " Inc.";
+            return bstVendor;
+        }
         return mVendor;
     }
 
@@ -1118,6 +1125,10 @@ public final class Sensor {
      * @return version of the sensor's module.
      */
     public int getVersion() {
+        if (mVersion == 0) {
+            // Apps like perk tv depend on this to check if it is bluestacks.
+            return 1;
+        }
         return mVersion;
     }
 
@@ -1312,7 +1323,7 @@ public final class Sensor {
 
     @Override
     public String toString() {
-        return "{Sensor name=\"" + mName + "\", vendor=\"" + mVendor + "\", version=" + mVersion
+        return "{Sensor name=\"" + mName + "\", vendor=\"" + getVendor() + "\", version=" + mVersion
                 + ", type=" + mType + ", maxRange=" + mMaxRange + ", resolution=" + mResolution
                 + ", power=" + mPower + ", minDelay=" + mMinDelay + "}";
     }

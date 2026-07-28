@@ -11390,6 +11390,9 @@ public class Intent implements Parcelable, Cloneable {
      * @see #removeExtra
      */
     public @NonNull Intent putExtras(@NonNull Bundle extras) {
+        if (extras == null) {
+            return this;
+        }
         // If the provided Bundle has not yet been unparceled then treat this as unfiltered extras.
         if (extras.isParcelled()) {
             mLocalFlags |= LOCAL_FLAG_UNFILTERED_EXTRAS;

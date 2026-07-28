@@ -5737,6 +5737,13 @@ final class ActivityRecord extends WindowToken {
             case RESUMED:
                 mAtmService.updateBatteryStats(this, true);
                 mAtmService.updateActivityUsageStats(this, Event.ACTIVITY_RESUMED);
+                // R259 bstNotifyActivityDisplayed: focus may stay on SystemUI;
+                // notify host when a real activity becomes RESUMED.
+                try {
+                    mWmService.bstNotifyActivityDisplayed(this);
+                } catch (Exception e) {
+                    Slog.w(TAG, "R259 bstNotifyActivityDisplayed failed: " + e);
+                }
                 // Fall through.
             case STARTED:
                 // Update process info while making an activity from invisible to visible, to make

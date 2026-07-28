@@ -54,6 +54,7 @@ import android.app.ActivityThread;
 import android.app.ResourcesManager;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.overlay.OverlayPaths;
@@ -70,11 +71,13 @@ import android.content.res.XmlResourceParser;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Debug;
+import android.os.Process;
 import android.os.FileUtils;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.PatternMatcher;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
@@ -102,6 +105,8 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.ClassLoaderFactory;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.XmlUtils;
+
+import com.bluestacks.os.IBstFilterAppsService;
 
 import libcore.io.IoUtils;
 import libcore.util.EmptyArray;
@@ -1755,6 +1760,20 @@ public class PackageParser {
                     }
                 }
             }
+        }
+
+        // ROB-15882 extract native libs for Pokemon app to avoid emulator detection.
+        try {
+            int ppid = android.os.Process.myPpid();
+            if (ppid != 1 && ppid != 2 && !packageSplit.first.equals("system_server")) {
+                IBstFilterAppsService BstFilter = IBstFilterAppsService.Stub.asInterface(ServiceManager.getService(Context.BST_FILTER_APPS));
+                if (BstFilter != null && BstFilter.isExtractNativeLibs(packageSplit.first)) {
+                    extractNativeLibs = true;
+                }
+            }
+        } catch (Exception ex) {
+            Slog.d(TAG, ex.getMessage());
+            ex.printStackTrace();
         }
 
         // Check to see if overlay should be excluded based on system property condition
@@ -3576,7 +3595,24 @@ public class PackageParser {
         if (sa.getBoolean(
                 com.android.internal.R.styleable.AndroidManifestApplication_largeHeap,
                 false)) {
-            ai.flags |= ApplicationInfo.FLAG_LARGE_HEAP;
+            // Not honoring largeHeap flag for lineage apps as otherwise they died with no VMA space available error.
+            if (DEBUG_PARSER) Slog.w (TAG, "largeHeap enabled for " + pkgName);
+            IBstFilterAppsService BstFilter = IBstFilterAppsService.Stub.asInterface(
+                    ServiceManager.getService(Context.BST_FILTER_APPS));
+            boolean ignoreLargeHeap = false;
+            try {
+                ignoreLargeHeap = BstFilter.isIgnoreLargeHeapApp(pkgName);
+            } catch (Exception ex) {
+                Slog.d(TAG, ex.getMessage());
+                ex.printStackTrace();
+            }
+
+            if (ignoreLargeHeap) {
+                if (DEBUG_PARSER) Slog.w (TAG, "NOT SETTING largeHeap flag for " + pkgName);
+            } else {
+                if (DEBUG_PARSER) Slog.w (TAG, "SETTING largeHeap flag for " + pkgName);
+                ai.flags |= ApplicationInfo.FLAG_LARGE_HEAP;
+            }
         }
 
         if (sa.getBoolean(

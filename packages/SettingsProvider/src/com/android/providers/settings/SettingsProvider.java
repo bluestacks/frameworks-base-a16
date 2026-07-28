@@ -103,6 +103,8 @@ import android.os.ServiceManager;
 import android.os.SystemConfigManager;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.util.BstUtils;
+import android.util.Slog;
 import android.os.UserManager;
 import android.provider.DeviceConfig;
 import android.provider.Settings;
@@ -1766,8 +1768,26 @@ public class SettingsProvider extends ContentProvider {
 
         // Not the SSAID; do a straight lookup
         synchronized (mLock) {
-            return mSettingsRegistry.getSettingLocked(SETTINGS_TYPE_SECURE,
+            Setting setting = mSettingsRegistry.getSettingLocked(SETTINGS_TYPE_SECURE,
                     owningUserId, deviceId, name);
+            // A16DBG:P2:FW-PERIPH-6 BST hide a11y services from setting for 3rd-party (a13)
+            if (Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES.equals(name) && setting != null
+                    && setting.getValue() != null) {
+                int callingUid = Binder.getCallingUid();
+                final String filteredServices =
+                        BstUtils.filterHiddenServices(setting.getValue(), callingUid);
+                final SettingsState settingsState = mSettingsRegistry.getSettingsLocked(
+                        SETTINGS_TYPE_SECURE, owningUserId, deviceId);
+                if (settingsState == null) {
+                    Slog.e(LOG_TAG, "A16DBG:P2:FW-PERIPH-6 Failed to obtain SettingsState");
+                    return setting;
+                }
+                setting = settingsState.new Setting(
+                        setting.getName(), filteredServices, setting.getDefaultValue(),
+                        setting.getPackageName(), setting.getTag(), setting.isDefaultFromSystem(),
+                        setting.getId());
+            }
+            return setting;
         }
     }
 

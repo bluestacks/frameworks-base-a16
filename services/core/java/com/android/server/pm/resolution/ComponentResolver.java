@@ -19,6 +19,8 @@ package com.android.server.pm.resolution;
 import static android.content.pm.PackageManager.INSTALL_FAILED_CONFLICTING_PROVIDER;
 
 import static com.android.server.pm.PackageManagerService.DEBUG_PACKAGE_SCANNING;
+import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
+
 import static com.android.server.pm.PackageManagerService.DEBUG_REMOVE;
 
 import android.annotation.NonNull;
@@ -26,6 +28,7 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.Context;
 import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
@@ -35,6 +38,10 @@ import android.content.pm.PackageManager;
 import android.content.pm.ProviderInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
+import android.os.Binder;
+import android.os.Process;
+import android.os.ServiceManager;
+import android.os.Trace;
 import android.os.UserHandle;
 import android.util.ArrayMap;
 import android.util.ArraySet;
@@ -43,6 +50,7 @@ import android.util.Log;
 import android.util.LogPrinter;
 import android.util.Pair;
 import android.util.Slog;
+import android.util.BstUtils;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.pm.pkg.component.ComponentMutateUtils;
@@ -55,6 +63,8 @@ import com.android.internal.pm.pkg.component.ParsedProviderImpl;
 import com.android.internal.pm.pkg.component.ParsedService;
 import com.android.internal.util.ArrayUtils;
 import com.android.server.IntentResolver;
+
+import com.bluestacks.os.IBstFilterAppsService;
 import com.android.server.pm.Computer;
 import com.android.server.pm.PackageManagerException;
 import com.android.server.pm.UserManagerService;
@@ -86,6 +96,9 @@ public class ComponentResolver extends ComponentResolverLocked implements
     private static final String TAG = "PackageManager";
     private static final boolean DEBUG_FILTERS = false;
     private static final boolean DEBUG_SHOW_INFO = false;
+
+    // A16DBG:P2:FW-SERVICES-2a hideBlueStacksPkg filter apps service
+    static IBstFilterAppsService mBstfilter;
 
     // Convenience function to report that this object has changed.
     private void onChanged() {
@@ -1076,6 +1089,48 @@ public class ComponentResolver extends ComponentResolverLocked implements
                 }
             }
             return true;
+        }
+
+        @Override
+        protected boolean isBluestacksFilter(
+                Pair<ParsedActivity, ParsedIntentInfo> filter, List<ResolveInfo> dest) {
+            Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "isBluestacksFilter");
+            try {
+                ParsedActivity parsedActivity = filter.first;
+                String packageName = parsedActivity.getPackageName();
+                int uid = Binder.getCallingUid();
+                if (uid >= Process.FIRST_APPLICATION_UID && packageName != null
+                        && packageName.startsWith("com.bluestacks")) {
+                    if (uid != Process.SYSTEM_UID) {
+                        int pid = Binder.getCallingPid();
+                        String callingPackage = BstUtils.getAppNameFromPid(pid);
+                        boolean isHideFromPkg = false;
+                        try {
+                            if (mBstfilter == null) {
+                                mBstfilter = IBstFilterAppsService.Stub.asInterface(
+                                        ServiceManager.getService(Context.BST_FILTER_APPS));
+                            }
+                            isHideFromPkg = mBstfilter.isHideBstActivityInfo(callingPackage);
+                        } catch (Exception e) {
+                            Slog.w(TAG, "A16DBG:P2:FW-SERVICES-2a isBluestacksFilter: " + e);
+                        }
+                        if (isHideFromPkg) {
+                            boolean isAppPrivileged = BstUtils.bstIsCallingAppPrivileged(
+                                    uid, callingPackage);
+                            if (DEBUG_SHOW_INFO) {
+                                Log.v(TAG, "A16DBG:P2:FW-SERVICES-2a pkg=" + callingPackage
+                                        + " query=" + parsedActivity.getName());
+                            }
+                            if (BstUtils.hideBlueStacksPkg(packageName, isAppPrivileged)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                return false;
+            } finally {
+                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
+            }
         }
 
         @Override

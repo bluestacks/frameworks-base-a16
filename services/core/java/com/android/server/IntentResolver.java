@@ -534,6 +534,11 @@ public abstract class IntentResolver<F, R extends Object> {
      */
     protected abstract boolean isPackageForFilter(String packageName, F filter);
 
+    // A16DBG:P2:FW-SERVICES-2a — hook for hideBlueStacksPkg (override in ComponentResolver)
+    protected boolean isBluestacksFilter(F filter, List<R> dest) {
+        return false;
+    }
+
     protected abstract F[] newArray(int size);
 
     @SuppressWarnings("unchecked")
@@ -745,6 +750,11 @@ public abstract class IntentResolver<F, R extends Object> {
         for (i=0; i<N && (filter=src[i]) != null; i++) {
             int match;
             if (debug) Slog.v(TAG, "Matching against filter " + filter);
+
+            if (isBluestacksFilter(filter, dest)) {
+                if (debug) Slog.v(TAG, "A16DBG:P2:FW-SERVICES-2a bluestacks filter skip " + filter);
+                continue;
+            }
 
             if (excludingStopped && isFilterStopped(computer, filter, userId)) {
                 if (debug) {

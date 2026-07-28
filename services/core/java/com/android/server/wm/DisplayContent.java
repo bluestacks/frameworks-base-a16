@@ -4067,6 +4067,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         getDisplayPolicy().focusChangedLw(oldFocus, newFocus);
         mAtmService.mBackNavigationController.onFocusChanged(newFocus);
 
+        // R255 / Henry bstSendTopDisplayedOnFocusChange
+        // Sending the top displayed activity info to host on Focus change.
+        if (newFocus != null) {
+            mWmService.bstSendTopDisplayedOnFocusChange(newFocus);
+        }
+
         if (imeLayeringTargetChanged && oldFocus != mInputMethodWindow) {
             // Focus of the input method window changed. Perform layout if needed.
             if (mode == UPDATE_FOCUS_PLACING_SURFACES) {

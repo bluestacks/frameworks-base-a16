@@ -64,6 +64,7 @@ import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.ArraySet;
+import android.util.Log;
 import android.util.RotationUtils;
 import android.util.Slog;
 import android.util.TimeUtils;
@@ -102,6 +103,7 @@ public class DisplayRotation {
     public static final int USE_CURRENT_ROTATION = -1;
     public static final int NO_UPDATE_USER_ROTATION = -2;
     private static final String TAG = TAG_WITH_CLASS_NAME ? "DisplayRotation" : TAG_WM;
+    private static final boolean BST_DEBUG_ORIENTATION = SystemProperties.getInt("bst.debug.orientation", 0) > 0 ? true : false;
 
     // Delay in milliseconds when updating config due to folding events. This prevents
     // config changes and unexpected jumps while folding the device to closed state.
@@ -226,7 +228,7 @@ public class DisplayRotation {
      * regardless of all other states (including app requested orientation). {@code true} the
      * display rotation should be fixed to user specified rotation, {@code false} otherwise.
      */
-    private int mFixedToUserRotation = IWindowManager.FIXED_TO_USER_ROTATION_DEFAULT;
+    private int mFixedToUserRotation = IWindowManager.FIXED_TO_USER_ROTATION_DISABLED;
 
     private int mDemoHdmiRotation;
     private int mDemoRotation;
@@ -381,26 +383,17 @@ public class DisplayRotation {
 
     void configure(int width, int height) {
         final Resources res = mContext.getResources();
+        // BST: only treat rotation 0/1 paths; pin portrait/landscape pairs.
         if (width > height) {
             mLandscapeRotation = Surface.ROTATION_0;
             mSeascapeRotation = Surface.ROTATION_180;
-            if (res.getBoolean(R.bool.config_reverseDefaultRotation)) {
-                mPortraitRotation = Surface.ROTATION_90;
-                mUpsideDownRotation = Surface.ROTATION_270;
-            } else {
-                mPortraitRotation = Surface.ROTATION_270;
-                mUpsideDownRotation = Surface.ROTATION_90;
-            }
+            mPortraitRotation = Surface.ROTATION_90;
+            mUpsideDownRotation = Surface.ROTATION_270;
         } else {
             mPortraitRotation = Surface.ROTATION_0;
             mUpsideDownRotation = Surface.ROTATION_180;
-            if (res.getBoolean(R.bool.config_reverseDefaultRotation)) {
-                mLandscapeRotation = Surface.ROTATION_270;
-                mSeascapeRotation = Surface.ROTATION_90;
-            } else {
-                mLandscapeRotation = Surface.ROTATION_90;
-                mSeascapeRotation = Surface.ROTATION_270;
-            }
+            mLandscapeRotation = Surface.ROTATION_90;
+            mSeascapeRotation = Surface.ROTATION_270;
         }
 
         // For demo purposes, allow the rotation of the HDMI display to be controlled.
@@ -749,8 +742,7 @@ public class DisplayRotation {
         mDisplayContent.updateOrientation();
     }
 
-    @VisibleForTesting
-    void setUserRotation(int userRotationMode, int userRotation, String caller) {
+    public void setUserRotation(int userRotationMode, int userRotation, String caller) {
         if (useDefaultSettingsProvider()) {
             // We'll be notified via settings listener, so we don't need to update internal values.
             final ContentResolver res = mContext.getContentResolver();
@@ -796,6 +788,12 @@ public class DisplayRotation {
             // into account we need to call onConfigurationChanged again.
             mDisplayContent.onMirrorOutputSurfaceOrientationChanged();
         }
+    }
+
+    /** @hide BlueStacks */
+    public void setBstProposedRotation(int proposedRotation) {
+        setUserRotation(WindowManagerPolicy.USER_ROTATION_LOCKED, proposedRotation, "bst");
+        dispatchProposedRotation(proposedRotation);
     }
 
     /**
@@ -1111,19 +1109,10 @@ public class DisplayRotation {
         }
 
         @Surface.Rotation
-        int sensorRotation = mOrientationListener != null
-                ? mOrientationListener.getProposedRotation() // may be -1
-                : -1;
-        if (mFoldController != null && mFoldController.shouldIgnoreSensorRotation()) {
-            sensorRotation = -1;
-        }
-        if (mDeviceStateController.shouldReverseRotationDirectionAroundZAxis(mDisplayContent)) {
-            sensorRotation = RotationUtils.reverseRotationDirectionAroundZAxis(sensorRotation);
-        }
-        mLastSensorRotation = sensorRotation;
-        if (sensorRotation < 0) {
-            sensorRotation = lastRotation;
-        }
+        // BST: Not using sensorRotation (no accelerometer); use lastRotation.
+        int sensorRotation = lastRotation;
+        if (BST_DEBUG_ORIENTATION)
+            Log.d(TAG, "rotationForOrientation: mUserRotationMode  " + mUserRotationMode + " sensorRotation "  + sensorRotation );
 
         final int lidState = mDisplayPolicy.getLidState();
         final int dockMode = mDisplayPolicy.getDockMode();

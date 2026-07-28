@@ -95,6 +95,7 @@ import android.text.TextUtils;
 import android.util.AndroidException;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.BstUtils;
 import android.util.Log;
 import android.util.MemoryIntArray;
 import android.util.Slog;
@@ -3639,6 +3640,12 @@ public final class Settings {
         public boolean putStringForUser(ContentResolver cr, String name, String value,
                 String tag, boolean makeDefault, final @CanBeCURRENT @UserIdInt int userId,
                 boolean overrideableByRestore) {
+            // A16DBG:P2:FW-CORE-APP-5 block apps changing brightness/screen timeout (a13)
+            if (name.equals("screen_brightness") || name.equals("screen_off_timeout")) {
+                Log.d(TAG, "Package name:-" + cr.getPackageName() + " trying to change " + name
+                        + " with value=" + value);
+                return true;
+            }
             try {
                 Bundle arg = new Bundle();
                 arg.putString(Settings.NameValueTable.VALUE, value);
@@ -3790,6 +3797,43 @@ public final class Settings {
                     }
                 }
             }
+
+            // A16DBG:P2:FW-CORE-APP-5 Settings anti-detection hooks (a13)
+            if (name != null && name.equals(Settings.Secure.ALLOW_MOCK_LOCATION)) {
+                try {
+                    int pid = Binder.getCallingPid();
+                    String callingApp = BstUtils.getAppNameFromPid(pid);
+                    if (callingApp != null && callingApp.startsWith("com.nianticlabs")) {
+                        if (DEBUG) Log.w(TAG, "A16DBG:P2:FW-CORE-APP-5 fake ALLOW_MOCK_LOCATION for "
+                                + callingApp);
+                        return "0";
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "A16DBG:P2:FW-CORE-APP-5 ALLOW_MOCK_LOCATION: " + e.getMessage());
+                }
+            } else if (name != null && name.equals(Settings.Global.WEBVIEW_MULTIPROCESS)) {
+                try {
+                    int pid = Binder.getCallingPid();
+                    String callingApp = BstUtils.getAppNameFromPid(pid);
+                    if (callingApp != null && (callingApp.startsWith("com.netease.mrzh")
+                            || callingApp.equals("com.tencent.tmgp.yongyong.mrzh"))) {
+                        return "1";
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "A16DBG:P2:FW-CORE-APP-5 WEBVIEW_MULTIPROCESS: " + e.getMessage());
+                }
+            } else if (name != null && (name.equals(Settings.Global.ADB_ENABLED)
+                    || name.equals(Settings.Global.DEVELOPMENT_SETTINGS_ENABLED))) {
+                try {
+                    int uid = Binder.getCallingUid();
+                    if (uid >= 10000) {
+                        return "0";
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "A16DBG:P2:FW-CORE-APP-5 ADB/DEV_SETTINGS: " + e.getMessage());
+                }
+            }
+
 
             IContentProvider cp = mProviderHolder.getProvider(cr);
             if (cp == null) {

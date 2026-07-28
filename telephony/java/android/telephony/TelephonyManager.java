@@ -191,6 +191,10 @@ import java.util.stream.IntStream;
 @SystemService(Context.TELEPHONY_SERVICE)
 @RequiresFeature(PackageManager.FEATURE_TELEPHONY)
 public class TelephonyManager {
+    // A16DBG:P2:FW-PERIPH-3 BST operator spoof (anti-emulator-detection, a13)
+    private static final boolean BST_TELEPHONY_CHANGES_ENABLED = true;
+    private static final String PROPERTY_OPERATOR_ALPHA = "gsm.operator.alpha";
+    private static final String PROPERTY_OPERATOR_NUMERIC = "gsm.operator.numeric";
     private static final String TAG = "TelephonyManager";
 
     /**
@@ -2256,6 +2260,8 @@ public class TelephonyManager {
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY)
     @Nullable
     public String getDeviceSoftwareVersion(int slotIndex) {
+        // A16DBG:P2:FW-PERIPH-5 BST spoof software version for 3rd-party only (a13; uid-gated)
+        if (BST_TELEPHONY_CHANGES_ENABLED && Binder.getCallingUid() >= 10000) return "01";
         ITelephony telephony = getITelephony();
         if (telephony == null) return null;
 
@@ -2307,6 +2313,9 @@ public class TelephonyManager {
     @SuppressAutoDoc // No support for device / profile owner or carrier privileges (b/72967236).
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public String getDeviceId() {
+        // A16DBG:P2:FW-PERIPH-5 BST spoof device id for 3rd-party only (anti-detection, a13;
+        //  uid-gated so system_server boot path gets real id — PERIPH-3b lesson)
+        if (BST_TELEPHONY_CHANGES_ENABLED && Binder.getCallingUid() >= 10000) return "01";
         try {
             ITelephony telephony = getITelephony();
             if (telephony == null)
@@ -2817,7 +2826,12 @@ public class TelephonyManager {
      */
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_RADIO_ACCESS)
     public String getNetworkOperatorName() {
-        return getNetworkOperatorName(getSubId());
+        // A16DBG:P2:FW-PERIPH-3 BST spoof operator name (a13)
+        if (!BST_TELEPHONY_CHANGES_ENABLED) {
+            return getNetworkOperatorName(getSubId());
+        } else {
+            return SystemProperties.get(PROPERTY_OPERATOR_ALPHA, "T-Mobile");
+        }
     }
 
     /**
@@ -2839,7 +2853,12 @@ public class TelephonyManager {
      */
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_RADIO_ACCESS)
     public String getNetworkOperator() {
-        return getNetworkOperatorForPhone(getPhoneId());
+        // A16DBG:P2:FW-PERIPH-3 BST spoof operator numeric (a13)
+        if (!BST_TELEPHONY_CHANGES_ENABLED) {
+            return getNetworkOperatorForPhone(getPhoneId());
+        } else {
+            return SystemProperties.get(PROPERTY_OPERATOR_NUMERIC, "310260");
+        }
     }
 
     /**

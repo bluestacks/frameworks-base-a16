@@ -182,6 +182,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.OptionalInt;
 import java.util.concurrent.Executor;
+import com.bluestacks.os.BstUtilsManager;
 
 /**
  * InputMethodService provides a standard implementation of an InputMethod,
@@ -2371,6 +2372,11 @@ public class InputMethodService extends AbstractInputMethodService {
             return true;
         }
         Configuration config = getResources().getConfiguration();
+        // A16DBG:P2:FW-CORE-APP BST soft-keyboard toggle (a13); fall back to config if svc absent
+        BstUtilsManager mBstUtils = (BstUtilsManager) getSystemService(Context.BST_UTILS);
+        if (mBstUtils != null) {
+            return mBstUtils.isBstSoftKeyboardEnabled();
+        }
         return config.keyboard == Configuration.KEYBOARD_NOKEYS
                 || config.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_YES;
     }

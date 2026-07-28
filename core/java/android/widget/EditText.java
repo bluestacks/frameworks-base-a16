@@ -31,6 +31,10 @@ import android.text.method.ArrowKeyMovementMethod;
 import android.text.method.MovementMethod;
 import android.text.style.SpanUtils;
 import android.util.AttributeSet;
+import android.util.BstUtils;
+import android.os.Binder;
+
+import com.bluestacks.os.BstFilterAppsManager;
 import android.view.KeyEvent;
 
 import com.android.internal.R;
@@ -181,6 +185,18 @@ public class EditText extends TextView {
 
     @Override
     public void setText(CharSequence text, BufferType type) {
+        // A16DBG:P2:FW-CORE-APP ROB-11067 block setText while IME composing (a13)
+        boolean isComposing = android.os.SystemProperties.getInt("bst.ime_is_composing", 0) == 1;
+        if (isComposing) {
+            int uid = Binder.getCallingUid();
+            if (uid >= 10000) {
+                String packageName = BstUtils.getAppNameFromPid(Binder.getCallingPid());
+                BstFilterAppsManager bstfilter = BstFilterAppsManager.getInstance();
+                if (bstfilter.isBlockEditWhenComposing(packageName)) {
+                    return;
+                }
+            }
+        }
         super.setText(text, BufferType.EDITABLE);
     }
 

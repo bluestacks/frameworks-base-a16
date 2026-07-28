@@ -317,6 +317,8 @@ import java.util.function.BooleanSupplier;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
+import com.bluestacks.os.BstHostCallManager;
+
 /**
  * The implementation of the audio service for volume, audio focus, device management...
  * <p>
@@ -5914,7 +5916,31 @@ public class AudioService extends IAudioService.Stub
         if (streamType == AudioSystem.STREAM_MUSIC && isFullVolumeDevice(device)) {
             flags &= ~AudioManager.FLAG_SHOW_UI;
         }
+        // A16DBG:P2:FW-SERVICES-4a notify host on STREAM_MUSIC volume change
+        if (streamType == AudioSystem.STREAM_MUSIC) {
+            bstSendVolumeToHost(index);
+        }
         mVolumeController.postVolumeChanged(streamType, flags);
+    }
+
+
+    // A16DBG:P2:FW-SERVICES-4a volume host sync (a13 bstSendVolumeToHost)
+    private void bstSendVolumeToHost(int index) {
+        int volume = index / 10;
+        VolumeStreamState musicState = mStreamStates.get(AudioSystem.STREAM_MUSIC);
+        boolean mute = musicState != null && musicState.mIsMuted;
+
+        Log.d(TAG, "bstSendVolumeToHost: currentVolume = " + volume + " mute = " + mute);
+
+        BstHostCallManager bstHostCallManagerSvc =
+                (BstHostCallManager) mContext.getSystemService(Context.BST_HOST_CALL);
+        if (bstHostCallManagerSvc == null) {
+            return;
+        }
+        int rval = bstHostCallManagerSvc.onVolumeChanged(mute, volume);
+        if (rval != 0) {
+            Log.w(TAG, "ERROR in sending volume data request, rval = " + rval);
+        }
     }
 
     // Don't show volume UI when:

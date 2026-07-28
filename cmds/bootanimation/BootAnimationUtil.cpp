@@ -42,6 +42,10 @@ static const std::vector<std::string> PLAY_SOUND_BOOTREASON_BLACKLIST {
 
 
 bool bootAnimationDisabled() {
+    // Disabling bootanimation by default
+    return true;
+
+    /*
     char value[PROPERTY_VALUE_MAX];
     property_get("debug.sf.nobootanimation", value, "0");
     if (atoi(value) > 0) {
@@ -57,6 +61,7 @@ bool bootAnimationDisabled() {
     }
 
     return false;
+    */
 }
 
 void waitForSurfaceFlinger() {

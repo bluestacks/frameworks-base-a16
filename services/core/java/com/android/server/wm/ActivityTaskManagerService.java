@@ -242,6 +242,7 @@ import android.sysprop.DisplayProperties;
 import android.telecom.TelecomManager;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.BstUtils;
 import android.util.IntArray;
 import android.util.Log;
 import android.util.Slog;
@@ -329,6 +330,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
+
+import com.bluestacks.os.BstFilterAppsManager;
 
 /**
  * System service for managing activities and their containers (task, displays,... ).
@@ -1180,6 +1183,26 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 config.reqInputFeatures |= ConfigurationInfo.INPUT_FEATURE_HARD_KEYBOARD;
             }
             config.reqGlEsVersion = GL_ES_VERSION;
+            // A16DBG:P2:FW-WM ATM getGlVersion — per-app GLES override from FilterApps
+            try {
+                final int pid = android.os.Binder.getCallingPid();
+                final int uid = android.os.Binder.getCallingUid();
+                if (uid >= 10000) {
+                    BstFilterAppsManager bstFilter = (BstFilterAppsManager) mContext
+                            .getSystemService(android.content.Context.BST_FILTER_APPS);
+                    if (bstFilter != null) {
+                        String pkgName = BstUtils.getAppNameFromPid(pid);
+                        int glVersion = bstFilter.getGlVersion(pkgName);
+                        if (glVersion != -1) {
+                            config.reqGlEsVersion = glVersion;
+                            Slog.i(TAG, "A16DBG:P2:FW-WM getGlVersion pkg=" + pkgName
+                                    + " gl=" + glVersion);
+                        }
+                    }
+                }
+            } catch (RuntimeException e) {
+                Slog.w(TAG, "A16DBG:P2:FW-WM getGlVersion: " + e);
+            }
         }
         return config;
     }

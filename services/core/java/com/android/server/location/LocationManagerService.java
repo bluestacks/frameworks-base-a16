@@ -96,6 +96,7 @@ import android.os.WorkSource.WorkChain;
 import android.provider.Settings;
 import android.stats.location.LocationStatsEnums;
 import android.util.ArrayMap;
+import android.util.BstUtils;
 import android.util.ArraySet;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
@@ -1807,6 +1808,27 @@ public class LocationManagerService extends ILocationManager.Stub implements
 
         @Override
         public boolean isProviderEnabledForUser(@NonNull String provider, int userId) {
+            // A16DBG:P2:FW-SERVICES-1b Location — suppress GMS network accuracy popup (a13)
+            if ("network".equals(provider)) {
+                int pid = Binder.getCallingPid();
+                String packageName = BstUtils.getAppNameFromPid(pid);
+                if (D) {
+                    Log.d(TAG, "A16DBG:P2:FW-SERVICES-1b isProviderEnabled pid="
+                            + pid + " pkg=" + packageName);
+                }
+                if (packageName != null
+                        && packageName.startsWith("com.google.android.gms")) {
+                    LocationProviderManager networkManager = getLocationProviderManager(
+                            provider);
+                    if (networkManager == null || !networkManager.isEnabled(userId)) {
+                        if (D) {
+                            Log.d(TAG, "A16DBG:P2:FW-SERVICES-1b network disabled for gms");
+                        }
+                        return false;
+                    }
+                }
+            }
+
             userId = ActivityManager.handleIncomingUser(Binder.getCallingPid(),
                     Binder.getCallingUid(), userId, false, false, "isProviderEnabledForUser", null);
 

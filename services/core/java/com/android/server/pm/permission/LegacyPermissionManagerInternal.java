@@ -101,6 +101,13 @@ public interface LegacyPermissionManagerInternal {
     void grantDefaultPermissions(@UserIdInt int userId);
 
     /**
+     * Assign permissions to the packages listed in the file.
+     *
+     * @param filepath path to permissions XML for BlueStacks apps
+     */
+    void assignPermissionsToBstApps(@NonNull String filepath);
+
+    /**
      * Schedule reading the default permission exceptions file.
      */
     void scheduleReadDefaultPermissionExceptions();

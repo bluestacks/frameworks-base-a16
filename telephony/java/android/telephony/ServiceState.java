@@ -344,6 +344,9 @@ public class ServiceState implements Parcelable {
     private String mOperatorAlphaShortRaw;
     private boolean mIsDataRoamingFromRegistration;
     private boolean mIsIwlanPreferred;
+    // A16DBG:P2:FW-PERIPH-4 BST report LTE network type (anti-detection, a13; gated)
+    private static boolean BST_CHANGES_ENABLED =
+            (android.os.SystemProperties.getInt("bst.config.modify_nwtype", 1) > 0);
 
     /**
      * get String description of roaming type
@@ -1658,6 +1661,10 @@ public class ServiceState implements Parcelable {
      */
     @TestApi
     public @NetworkType int getDataNetworkType() {
+        // A16DBG:P2:FW-PERIPH-4 BST report LTE (anti-detection, a13)
+        if (BST_CHANGES_ENABLED) {
+            return TelephonyManager.NETWORK_TYPE_LTE;
+        }
         final NetworkRegistrationInfo iwlanRegInfo = getNetworkRegistrationInfo(
                 NetworkRegistrationInfo.DOMAIN_PS, AccessNetworkConstants.TRANSPORT_TYPE_WLAN);
         final NetworkRegistrationInfo wwanRegInfo = getNetworkRegistrationInfo(

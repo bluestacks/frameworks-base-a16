@@ -1198,6 +1198,9 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
      */
     void onSystemUiStarted();
 
+    /** @hide BlueStacks */
+    void setBstProposedRotation(int proposedRotation);
+
     /**
      * Checks whether the policy is ready for dismissing the boot animation and completing the boot.
      *

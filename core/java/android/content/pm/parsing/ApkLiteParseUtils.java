@@ -64,6 +64,11 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
+import android.content.Context;
+import android.os.Process;
+import android.os.ServiceManager;
+import com.bluestacks.os.IBstFilterAppsService;
+
 /** @hide */
 public class ApkLiteParseUtils {
 
@@ -799,6 +804,20 @@ public class ApkLiteParseUtils {
             }
         }
 
+        // A16DBG:P2:FW-CORE-APP ROB-15882 force extractNativeLibs for anti-detection (a13)
+        try {
+            int ppid = android.os.Process.myPpid();
+            if (ppid != 1 && ppid != 2 && !packageSplit.first.equals("system_server")) {
+                IBstFilterAppsService BstFilter = IBstFilterAppsService.Stub.asInterface(
+                        ServiceManager.getService(Context.BST_FILTER_APPS));
+                if (BstFilter != null && BstFilter.isExtractNativeLibs(packageSplit.first)) {
+                    extractNativeLibs = true;
+                }
+            }
+        } catch (Exception ex) {
+            Slog.d(TAG, ex.getMessage());
+            ex.printStackTrace();
+        }
         // Check to see if overlay should be excluded based on system property condition
         if ((flags & FrameworkParsingPackageUtils.PARSE_IGNORE_OVERLAY_REQUIRED_SYSTEM_PROPERTY)
                 == 0 && !FrameworkParsingPackageUtils.checkRequiredSystemProperties(

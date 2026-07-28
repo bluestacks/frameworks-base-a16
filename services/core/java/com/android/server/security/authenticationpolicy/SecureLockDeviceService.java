@@ -389,10 +389,18 @@ public class SecureLockDeviceService extends SecureLockDeviceServiceInternal {
     }
 
     private boolean hasStrongBiometricSensor() {
-        for (SensorProperties sensorProps : mBiometricManager.getSensorProperties()) {
-            if (sensorProps.getSensorStrength() == SensorProperties.STRENGTH_STRONG) {
-                return true;
+        // R251 / Henry SecureLock null-safe: BiometricService may be disabled on BS (no GateKeeper HAL).
+        try {
+            if (mBiometricManager == null) {
+                return false;
             }
+            for (SensorProperties sensorProps : mBiometricManager.getSensorProperties()) {
+                if (sensorProps.getSensorStrength() == SensorProperties.STRENGTH_STRONG) {
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            Slog.w(TAG, "hasStrongBiometricSensor: biometrics unavailable", e);
         }
         return false;
     }

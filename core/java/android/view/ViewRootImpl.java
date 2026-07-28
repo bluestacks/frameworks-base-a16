@@ -224,6 +224,7 @@ import android.sysprop.DisplayProperties;
 import android.sysprop.ViewProperties;
 import android.text.TextUtils;
 import android.util.AndroidRuntimeException;
+import android.util.BstUtils;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.IndentingPrintWriter;
@@ -7900,6 +7901,31 @@ public final class ViewRootImpl implements ViewParent,
 
         private int processKeyEvent(QueuedInputEvent q) {
             final KeyEvent event = (KeyEvent)q.mEvent;
+
+            // A16DBG:P2:FW-CORE-APP-4 ROB-16938 FreeFireMax Space/C key release (a13)
+            int keyCode = event.getKeyCode();
+            int repeatCount = event.getRepeatCount();
+            int keyAction = event.getAction();
+            if ((keyCode == KeyEvent.KEYCODE_C || keyCode == KeyEvent.KEYCODE_SPACE)
+                    && keyAction == KeyEvent.ACTION_DOWN) {
+                int uid = Binder.getCallingUid();
+                if (uid >= 10000) {
+                    String packageName = BstUtils.getAppNameFromPid(Binder.getCallingPid());
+                    if (packageName != null && packageName.equals("com.dts.freefiremax")) {
+                        if (repeatCount == 0) {
+                            mView.postDelayed(() -> {
+                                KeyEvent eventUp = KeyEvent.changeAction(event, KeyEvent.ACTION_UP);
+                                eventUp = KeyEvent.changeTimeRepeat(
+                                        eventUp, eventUp.getEventTime() + 60, eventUp.getRepeatCount());
+                                enqueueInputEvent(eventUp);
+                            }, 60);
+                        } else {
+                            return FINISH_HANDLED;
+                        }
+                    }
+                }
+            }
+
             if (mView.dispatchKeyEventPreIme(event)) {
                 return FINISH_HANDLED;
             } else if (q.forPreImeOnly()) {

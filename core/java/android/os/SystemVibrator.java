@@ -101,6 +101,9 @@ public class SystemVibrator extends Vibrator {
         }
     }
 
+    // A16DBG:P2:FW-PERIPH BST: always report vibrator present (a13 bst_enable_vibrator)
+    private static final boolean bst_enable_vibrator = true;
+
     @Override
     public boolean hasVibrator() {
         int[] vibratorIds = getVibratorIds();
@@ -108,7 +111,7 @@ public class SystemVibrator extends Vibrator {
             Log.w(TAG, "Failed to check if vibrator exists; no vibrator manager.");
             return false;
         }
-        return vibratorIds.length > 0;
+        return vibratorIds.length > 0 || bst_enable_vibrator;
     }
 
     @Override

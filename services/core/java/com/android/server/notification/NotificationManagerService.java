@@ -362,6 +362,8 @@ import android.widget.Toast;
 import android.window.DesktopExperienceFlags;
 
 import com.android.internal.R;
+
+import com.bluestacks.os.BstHostCallManager;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.compat.IPlatformCompat;
@@ -826,6 +828,7 @@ public class NotificationManagerService extends SystemService {
     private NotificationRecordLogger mNotificationRecordLogger;
     private InstanceIdSequence mNotificationInstanceIdSequence;
     private Set<String> mMsgPkgsAllowedAsConvos = new HashSet();
+    private BstHostCallManager mBstHostCallManagerService;
     private String mDefaultSearchSelectorPkg;
 
     // Broadcast intent receiver for notification permissions review-related intents
@@ -10395,6 +10398,7 @@ public class NotificationManagerService extends SystemService {
                     }
 
                     if (notification.getSmallIcon() != null) {
+                        sendNotificationToHost(pkg, notification, r);
                         NotificationRecordLogger.NotificationReported maybeReport =
                                 mNotificationRecordLogger.prepareToLogNotificationPosted(r, old,
                                         position, buzzBeepBlinkLoggingCode,
@@ -13641,6 +13645,83 @@ public class NotificationManagerService extends SystemService {
                             /* optional int32 user_id = 5 */ userId));
                 }
             }
+        }
+    }
+
+
+    // A16DBG:P2:FW-SERVICES-2b send non-system app notification metadata to host (a13)
+    private void sendNotificationToHost(String pkgName, Notification notification,
+            NotificationRecord nr) {
+        if (notification.isGroupSummary()) {
+            if (DBG) {
+                Slog.d(TAG, "A16DBG:P2:FW-SERVICES-2b skip group summary");
+            }
+            return;
+        }
+
+        int progress = notification.extras.getInt(Notification.EXTRA_PROGRESS);
+        int progressMax = notification.extras.getInt(Notification.EXTRA_PROGRESS_MAX);
+        if (progress != 0 || progressMax != 0) {
+            return;
+        }
+
+        if (nr.isUpdate && (nr.getImportance() <= IMPORTANCE_LOW)) {
+            if (DBG) {
+                Slog.d(TAG, "A16DBG:P2:FW-SERVICES-2b skip low importance update");
+            }
+            return;
+        }
+
+        PackageManager pm = getContext().getPackageManager();
+        ApplicationInfo ai;
+        try {
+            ai = pm.getApplicationInfo(pkgName, PackageManager.GET_META_DATA);
+            int mask = ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP;
+            if ((ai.flags & mask) != 0) {
+                if (DBG) {
+                    Slog.d(TAG, "A16DBG:P2:FW-SERVICES-2b skip system app: " + pkgName);
+                }
+                return;
+            }
+        } catch (Exception e) {
+            Slog.e(TAG, "A16DBG:P2:FW-SERVICES-2b sendNotificationToHost: " + e.getMessage());
+            return;
+        }
+
+        String appName = pm.getApplicationLabel(ai).toString();
+        String contentTitle = notification.extras.getCharSequence(
+                Notification.EXTRA_TITLE, "").toString();
+        String contentText = notification.extras.getCharSequence(
+                Notification.EXTRA_TEXT, "").toString();
+        long mSecs = notification.when;
+        String notificationData;
+        try {
+            JSONObject json = new JSONObject();
+            json.put("packageName", pkgName);
+            json.put("appName", appName);
+            json.put("contentTitle", contentTitle);
+            json.put("contentText", contentText);
+            json.put("mSecsFromEpochUTC", mSecs);
+            notificationData = json.toString();
+        } catch (Exception e) {
+            Slog.e(TAG, "A16DBG:P2:FW-SERVICES-2b notification JSON: " + e.getMessage());
+            return;
+        }
+
+        if (DBG) {
+            Slog.d(TAG, "A16DBG:P2:FW-SERVICES-2b host notification: " + notificationData);
+        }
+        if (mBstHostCallManagerService == null) {
+            mBstHostCallManagerService = (BstHostCallManager) getContext().getSystemService(
+                    Context.BST_HOST_CALL);
+        }
+        if (mBstHostCallManagerService == null) {
+            Slog.w(TAG, "A16DBG:P2:FW-SERVICES-2b BST_HOST_CALL unavailable");
+            return;
+        }
+        int rval = mBstHostCallManagerService.onAppNotificationReceived(notificationData);
+        if (rval != 0) {
+            Slog.w(TAG, "A16DBG:P2:FW-SERVICES-2b onAppNotificationReceived rval=" + rval);
         }
     }
 

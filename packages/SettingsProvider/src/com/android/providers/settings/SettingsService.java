@@ -32,6 +32,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.util.Slog;
+import android.util.BstUtils;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -369,6 +370,11 @@ final public class SettingsService extends Binder {
                         callGetCommand, key, arg);
                 if (b != null) {
                     result = b.getPairValue();
+                    // A16DBG:P2:FW-PERIPH-7 BST filter a11y services for 3rd-party (a13)
+                    if (result != null && "secure".equals(table)
+                            && Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES.equals(key)) {
+                        result = BstUtils.filterHiddenServices(result, Binder.getCallingUid());
+                    }
                 }
             } catch (RemoteException e) {
                 throw new RuntimeException("Failed in IPC", e);

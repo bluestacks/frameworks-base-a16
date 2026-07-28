@@ -96,6 +96,7 @@ import android.os.ResultReceiver;
 import android.os.ShellCallback;
 import android.os.StrictMode;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
@@ -121,6 +122,8 @@ import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.modules.expresslog.Histogram;
 import com.android.server.LocalServices;
+
+import com.bluestacks.os.BstHostCallManager;
 import com.android.server.ServiceThread;
 import com.android.server.SystemService;
 
@@ -201,6 +204,7 @@ public class AccountManagerService
     private final PackageManager mPackageManager;
     private final AppOpsManager mAppOpsManager;
     private UserManager mUserManager;
+    private BstHostCallManager mBstHostCallManagerService;
     private final Injector mInjector;
 
     final MessageHandler mHandler;
@@ -211,6 +215,9 @@ public class AccountManagerService
     // Messages that can be sent on mHandler
     private static final int MESSAGE_TIMED_OUT = 3;
     private static final int MESSAGE_COPY_SHARED_ACCOUNT = 4;
+
+    private static final int BST_ACCOUNT_ADDED = 0;
+    private static final int BST_ACCOUNT_REMOVED = 1;
 
     private final IAccountAuthenticatorCache mAuthenticatorCache;
     private static final String PRE_N_DATABASE_NAME = "accounts.db";
@@ -1099,6 +1106,25 @@ public class AccountManagerService
     /**
      * Returns true if packageName is one of special values.
      */
+
+    // A16DBG:P2:FW-SERVICES-3 lazy BstHostCallManager (a13 account host callbacks)
+    private BstHostCallManager getBstHostCallManager() {
+        if (mBstHostCallManagerService == null) {
+            mBstHostCallManagerService = (BstHostCallManager) mContext.getSystemService(
+                    Context.BST_HOST_CALL);
+        }
+        return mBstHostCallManagerService;
+    }
+
+    void setGoogleAdId() {
+        Intent intent = new Intent();
+        ComponentName cn = new ComponentName("com.bluestacks.BstCommandProcessor",
+                "com.bluestacks.BstCommandProcessor.BstCommandProcessorService");
+        intent.setAction("setGoogleAdId");
+        intent.setComponent(cn);
+        mContext.startServiceAsUser(intent, new UserHandle(UserHandle.USER_CURRENT));
+    }
+
     private boolean isSpecialPackageKey(String packageName) {
         return (AccountManager.PACKAGE_NAME_KEY_LEGACY_VISIBLE.equals(packageName)
                 || AccountManager.PACKAGE_NAME_KEY_LEGACY_NOT_VISIBLE.equals(packageName));
@@ -1107,6 +1133,7 @@ public class AccountManagerService
     private void sendAccountsChangedBroadcast(
             int userId, String accountType, @NonNull String useCase) {
         Objects.requireNonNull(useCase, "useCase can't be null");
+        setGoogleAdId();
         Log.i(TAG, "the accountType= " + (accountType == null ? "" : accountType)
                 + " changed with useCase=" + useCase + " for userId=" + userId
                 + ", sending broadcast of " + ACCOUNTS_CHANGED_INTENT.getAction());
@@ -1338,6 +1365,18 @@ public class AccountManagerService
                             } finally {
                                 accountsDb.endTransaction();
                             }
+
+                            // A16DBG:P2:FW-SERVICES-3 obsolete-auth account remove host notify
+                            BstHostCallManager bstHost = getBstHostCallManager();
+                            if (bstHost != null) {
+                                if ("com.google".equals(account.type)) {
+                                    bstHost.googleAccountListUpdated(
+                                            account.name, BST_ACCOUNT_REMOVED);
+                                } else if ("now.gg".equals(account.type)) {
+                                    bstHost.onNowggAccountRemoved(account.name);
+                                }
+                            }
+
                             accountDeleted = true;
                             Log.i(TAG, "validateAccountsInternal#Deleted UserId="
                                     + accounts.userId + ", AccountId=" + accountId);
@@ -2056,6 +2095,21 @@ public class AccountManagerService
             addAccountToLinkedRestrictedUsers(account, accounts.userId);
         }
 
+        // A16DBG:P2:FW-SERVICES-3 Google account add host notify (a13)
+        String type = account.type;
+        BstHostCallManager bstHostAdd = getBstHostCallManager();
+        if (bstHostAdd != null && "com.google".equals(type)
+                && SystemProperties.get("persist.sys.user.email", "").isEmpty()) {
+            SystemProperties.set("persist.sys.user.email", account.name);
+            if (SystemProperties.get("bst.bluestacks_account_id", "").isEmpty()) {
+                SystemProperties.set("bst.bluestacks_account_id", account.name);
+                bstHostAdd.onGoogleLoginCompleted(account.name);
+            }
+        }
+        if (bstHostAdd != null && "com.google".equals(account.type)) {
+            bstHostAdd.googleAccountListUpdated(account.name, BST_ACCOUNT_ADDED);
+        }
+
         sendNotificationAccountUpdated(account, accounts);
         // Only send LOGIN_ACCOUNTS_CHANGED when the database changed.
         Log.i(TAG, "callingUid=" + callingUid + ", userId=" + accounts.userId
@@ -2628,6 +2682,16 @@ public class AccountManagerService
                     accounts.accountsDb.endTransaction();
                 }
                 if (isChanged) {
+                    // A16DBG:P2:FW-SERVICES-3 explicit account remove host notify
+                    BstHostCallManager bstHostRm = getBstHostCallManager();
+                    if (bstHostRm != null) {
+                        if ("com.google".equals(account.type)) {
+                            bstHostRm.googleAccountListUpdated(
+                                    account.name, BST_ACCOUNT_REMOVED);
+                        } else if ("now.gg".equals(account.type)) {
+                            bstHostRm.onNowggAccountRemoved(account.name);
+                        }
+                    }
                     removeAccountFromCacheLocked(accounts, account);
                     for (Entry<String, Integer> packageToVisibility : packagesToVisibility
                             .entrySet()) {

@@ -886,6 +886,11 @@ public class AuthController implements
 
     @Override
     public void setBiometricContextListener(IBiometricContextListener listener) {
+        // R253 / Henry: null-safe biometric context listener
+        if (listener == null) {
+            Log.w(TAG, "setBiometricContextListener: ignoring null listener");
+            return;
+        }
         if (mBiometricContextListenerJob != null) {
             mBiometricContextListenerJob.cancel(null);
         }

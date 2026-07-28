@@ -49,6 +49,7 @@ import android.os.ServiceManager;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
+import android.util.BstUtils;
 import android.util.IntArray;
 import android.util.Log;
 import android.util.SparseArray;
@@ -445,10 +446,50 @@ public final class InputManagerGlobal {
         synchronized (mInputDeviceListeners) {
             populateInputDevicesLocked();
 
-            final int count = mInputDevices.size();
-            final int[] ids = new int[count];
-            for (int i = 0; i < count; i++) {
-                ids[i] = mInputDevices.keyAt(i);
+            // A16DBG:P2:FW-CORE-APP-9 ROB-18338 filter nativeMouse for one package (a13)
+            int uid = Binder.getCallingUid();
+            String packageName = "";
+            if (uid >= Process.FIRST_APPLICATION_UID) {
+                packageName = BstUtils.getAppNameFromPid(Binder.getCallingPid());
+            }
+            if (!"com.netease.yyslshmt".equals(packageName)) {
+                final int count = mInputDevices.size();
+                final int[] ids = new int[count];
+                for (int i = 0; i < count; i++) {
+                    ids[i] = mInputDevices.keyAt(i);
+                }
+                return ids;
+            }
+
+            List<Integer> idList = new ArrayList<>();
+            for (int i = 0; i < mInputDevices.size(); i++) {
+                InputDevice device = mInputDevices.valueAt(i);
+                if (device == null) {
+                    int id = mInputDevices.keyAt(i);
+                    try {
+                        device = mIm.getInputDevice(id);
+                    } catch (RemoteException ex) {
+                        throw ex.rethrowFromSystemServer();
+                    }
+                }
+                if (device == null) {
+                    continue;
+                }
+                if (device.getVendorId() == 0x1234 && device.getProductId() == 0x5678) {
+                    if (debug()) {
+                        Log.d(TAG, "A16DBG:P2:FW-CORE-APP-9 filter device: " + device.getName()
+                                + " (Vendor: 0x" + Integer.toHexString(device.getVendorId())
+                                + ", Product: 0x" + Integer.toHexString(device.getProductId())
+                                + ")");
+                    }
+                    continue;
+                }
+                idList.add(device.getId());
+            }
+
+            int[] ids = new int[idList.size()];
+            for (int i = 0; i < idList.size(); i++) {
+                ids[i] = idList.get(i);
             }
             return ids;
         }

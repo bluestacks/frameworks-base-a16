@@ -138,6 +138,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.hardware.display.DisplayManagerGlobal;
 import android.hardware.input.InputManager;
 import android.net.Uri;
+import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -159,6 +160,7 @@ import android.text.InputType;
 import android.text.TextUtils;
 import android.util.ArraySet;
 import android.util.AttributeSet;
+import android.util.BstUtils;
 import android.util.DisplayMetrics;
 import android.util.FloatProperty;
 import android.util.LayoutDirection;
@@ -257,6 +259,8 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+
+import com.bluestacks.os.BstHostCallManager;
 
 /**
  * <p>
@@ -29263,6 +29267,33 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @Deprecated
     public void setSystemUiVisibility(int visibility) {
         if (visibility != mSystemUiVisibility) {
+            // A16DBG:P2:FW-CORE-APP ROB-11421 Roblox immersive via SYSTEM_UI_FLAG_FULLSCREEN (a13)
+            if ((visibility & View.SYSTEM_UI_FLAG_FULLSCREEN)
+                    != (mSystemUiVisibility & View.SYSTEM_UI_FLAG_FULLSCREEN)) {
+                int uid = Binder.getCallingUid();
+                if (uid >= 10000) {
+                    String packageName = BstUtils.getAppNameFromPid(Binder.getCallingPid());
+                    if (packageName != null && packageName.equals("com.roblox.client")) {
+                        String activityName = " "; // HD ignores param but empty-checks
+                        String mouseAction = (visibility & View.SYSTEM_UI_FLAG_FULLSCREEN)
+                                == View.SYSTEM_UI_FLAG_FULLSCREEN ? "enableNative" : "";
+                        String lastSent = android.os.SystemProperties.get(
+                                "bst.config.last_mouse_action", "");
+                        if (!mouseAction.isEmpty() || !lastSent.isEmpty()) {
+                            BstHostCallManager hcm = (BstHostCallManager)
+                                    mContext.getSystemService(Context.BST_HOST_CALL);
+                            if (hcm != null) {
+                                int rval = hcm.onSetMouseAction(packageName, activityName, mouseAction);
+                                android.os.SystemProperties.set(
+                                        "bst.config.last_mouse_action", mouseAction);
+                                if (rval != 0) {
+                                    Log.w(VIEW_LOG_TAG, "A16DBG:P2:FW-CORE-APP onSetMouseAction rval=" + rval);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             mSystemUiVisibility = visibility;
             if (mParent != null && mAttachInfo != null && !mAttachInfo.mRecomputeGlobalAttributes) {
                 mParent.recomputeViewAttributes(this);

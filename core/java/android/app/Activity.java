@@ -104,6 +104,7 @@ import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.ServiceManager.ServiceNotFoundException;
 import android.os.StrictMode;
+import android.os.SystemProperties;
 import android.os.SystemClock;
 import android.os.Trace;
 import android.os.UserHandle;
@@ -778,6 +779,12 @@ public class Activity extends ContextThemeWrapper
         Window.OnWindowDismissedCallback,
         ContentCaptureManager.ContentCaptureClient {
     private static final String TAG = "Activity";
+
+    private static final String TAG_BST_IAP = "Activity-GIAP";
+    private static final boolean DEBUG_BST =
+            android.os.SystemProperties.getInt("bst.debug.activity", 0) > 0;
+    private static final boolean DEBUG_BST_IAP = DEBUG_BST
+            || android.os.SystemProperties.getInt("bst.debug.iap", 0) > 0;
     private static final boolean DEBUG_LIFECYCLE = false;
     private static final long SLOW_OP_DURATION_MS = 500;
 
@@ -827,6 +834,43 @@ public class Activity extends ContextThemeWrapper
     private static final int LOG_AM_ON_TOP_RESUMED_LOST_CALLED = 30065;
     private OnBackInvokedCallback mDefaultBackCallback;
     private ObserverOnBackAnimationCallback mObserverBackCallback;
+
+    /* Constants associated with Google IAP */
+    private final String GIAP_RESPONSE_CODE = "RESPONSE_CODE";
+    private final String GIAP_RESPONSE_GET_SKU_DETAILS_LIST = "DETAILS_LIST";
+    private final String GIAP_RESPONSE_BUY_INTENT = "BUY_INTENT";
+    private final String GIAP_RESPONSE_INAPP_PURCHASE_DATA = "INAPP_PURCHASE_DATA";
+    private final String GIAP_RESPONSE_INAPP_SIGNATURE = "INAPP_DATA_SIGNATURE";
+    private final String GIAP_RESPONSE_INAPP_ITEM_LIST = "INAPP_PURCHASE_ITEM_LIST";
+    private final String GIAP_RESPONSE_INAPP_PURCHASE_DATA_LIST = "INAPP_PURCHASE_DATA_LIST";
+    private final String GIAP_RESPONSE_INAPP_SIGNATURE_LIST = "INAPP_DATA_SIGNATURE_LIST";
+    private final String GIAP_INAPP_CONTINUATION_TOKEN = "INAPP_CONTINUATION_TOKEN";
+
+    /* Response Code associated with Google IAP */
+    private final int GIAP_BILLING_RESPONSE_RESULT_OK = 0;
+    private final int GIAP_BILLING_RESPONSE_RESULT_USER_CANCELED = 1;
+    private final int GIAP_BILLING_RESPONSE_RESULT_SERVICE_UNAVAILABLE = 2;
+    private final int GIAP_BILLING_RESPONSE_RESULT_BILLING_UNAVAILABLE = 3;
+    private final int GIAP_BILLING_RESPONSE_RESULT_ITEM_UNAVAILABLE = 4;
+    private final int GIAP_BILLING_RESPONSE_RESULT_DEVELOPER_ERROR = 5;
+    private final int GIAP_BILLING_RESPONSE_RESULT_ERROR = 6;
+    private final int GIAP_BILLING_RESPONSE_RESULT_ITEM_ALREADY_OWNED = 7;
+    private final int GIAP_BILLING_RESPONSE_RESULT_ITEM_NOT_OWNED = 8;
+
+    // IAB Helper error codes
+    private static final int GIAP_IABHELPER_ERROR_BASE = -1000;
+    private static final int GIAP_IABHELPER_REMOTE_EXCEPTION = -1001;
+    private static final int GIAP_IABHELPER_BAD_RESPONSE = -1002;
+    private static final int GIAP_IABHELPER_VERIFICATION_FAILED = -1003;
+    private static final int GIAP_IABHELPER_SEND_INTENT_FAILED = -1004;
+    private static final int GIAP_IABHELPER_USER_CANCELLED = -1005;
+    private static final int GIAP_IABHELPER_UNKNOWN_PURCHASE_RESPONSE = -1006;
+    private static final int GIAP_IABHELPER_MISSING_TOKEN = -1007;
+    private static final int GIAP_IABHELPER_UNKNOWN_ERROR = -1008;
+    private static final int GIAP_IABHELPER_SUBSCRIPTIONS_NOT_AVAILABLE = -1009;
+    private static final int GIAP_IABHELPER_INVALID_CONSUMPTION = -1010;
+    private static final int GIAP_IABHELPER_SUBSCRIPTION_UPDATE_NOT_AVAILABLE = -1011;
+
 
     /**
      * After {@link Build.VERSION_CODES#TIRAMISU},
@@ -9686,6 +9730,214 @@ public class Activity extends ContextThemeWrapper
         }
     }
 
+    // A16DBG:P2:FW-CORE-APP-13 Google IAP purchase tracking (a13)
+    private void sendPurchaseDataToCommandProcessor(
+            boolean success, int responseCode, String purchaseData) {
+        if (DEBUG_BST_IAP) {
+            Log.d(TAG_BST_IAP, "sendPurchaseDataToCommandProcessor: success = " + success
+                    + ", responseCode = " + responseCode + ", purchaseData = " + purchaseData);
+        }
+        try {
+            Intent intent = new Intent();
+            ComponentName cn = new ComponentName("com.bluestacks.BstCommandProcessor",
+                    "com.bluestacks.BstCommandProcessor.BstCommandProcessorService");
+            intent.setAction("GIAPPurchaseData");
+            intent.setComponent(cn);
+
+            intent.putExtra("success", success);
+            if (!success) {
+                intent.putExtra("responseCodeDesc", getGIAPResponseDesc(responseCode));
+                intent.putExtra("responseCode", responseCode);
+                intent.putExtra("packageName", getPackageName());
+            }
+
+            if (purchaseData != null) {
+                intent.putExtra("purchaseData", purchaseData);
+            }
+
+            if (DEBUG_BST_IAP) {
+                Log.d(TAG_BST_IAP, "sending GIAP data (intent) : " + intent);
+            }
+            getBaseContext().startService(intent);
+        } catch (Exception e) {
+            Log.w(TAG_BST_IAP, "Error in sending GIAP data " + e.getMessage());
+            if (DEBUG_BST_IAP) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void performGoogleIAPHack(int resultCode, Intent origData) {
+        if (origData == null) {
+            if (DEBUG_BST_IAP) {
+                Log.w(TAG_BST_IAP,
+                        "in performGoogleIAPHack, Null data in pending activity result.");
+            }
+            return;
+        }
+
+        String packageName = getPackageName();
+        ComponentName componentName = getComponentName();
+        if (DEBUG_BST_IAP) {
+            Log.d(TAG_BST_IAP, "in performGoogleIAPHack, componentName = " + componentName
+                    + " packageName = " + packageName);
+        }
+
+        if (componentName == null && packageName == null) {
+            if (DEBUG_BST_IAP) {
+                Log.w(TAG_BST_IAP, "in performGoogleIAPHack, invalid componentName = "
+                        + componentName + " or packageName = " + packageName
+                        + " in pending activity result.");
+            }
+            return;
+        }
+
+        String purchaseData = null;
+        boolean transactionOk = false;
+        int responseCode = -1;
+        try {
+            Intent data = new Intent(origData);
+
+            if (DEBUG_BST_IAP) {
+                Log.v(TAG_BST_IAP, "origData: " + origData + " data: " + data
+                        + " origData extra: " + origData.getExtras()
+                        + " data extra: " + data.getExtras());
+            }
+
+            purchaseData = data.getStringExtra(GIAP_RESPONSE_INAPP_PURCHASE_DATA);
+            String dataSignature = data.getStringExtra(GIAP_RESPONSE_INAPP_SIGNATURE);
+            responseCode = getGIAPResponseCodeFromIntent(data);
+
+            if (purchaseData == null || dataSignature == null) {
+                if (DEBUG_BST_IAP) {
+                    Log.d(TAG_BST_IAP, "Either purchaseData or dataSignature is null,"
+                            + " purchaseData = " + purchaseData
+                            + ", dataSignature = " + dataSignature);
+                }
+                transactionOk = false;
+                return;
+            }
+
+            if (DEBUG_BST_IAP) {
+                Log.v(TAG_BST_IAP, "IAP Response Code: " + responseCode + " ( "
+                        + getGIAPResponseDesc(responseCode) + " )");
+                Log.v(TAG_BST_IAP, "IAP Purchase data: " + purchaseData);
+                Log.v(TAG_BST_IAP, "IAP Data signature: " + dataSignature);
+                Log.v(TAG_BST_IAP, "IAP Extras: " + data.getExtras());
+
+                if (responseCode == GIAP_BILLING_RESPONSE_RESULT_OK) {
+                    Log.v(TAG_BST_IAP, "IAP responseCode: BILLING_RESPONSE_RESULT_OK");
+                } else if (responseCode == GIAP_BILLING_RESPONSE_RESULT_USER_CANCELED) {
+                    Log.v(TAG_BST_IAP, "IAP responseCode: BILLING_RESPONSE_RESULT_USER_CANCELED");
+                } else if (responseCode == GIAP_BILLING_RESPONSE_RESULT_SERVICE_UNAVAILABLE) {
+                    Log.v(TAG_BST_IAP,
+                            "IAP responseCode: BILLING_RESPONSE_RESULT_SERVICE_UNAVAILABLE");
+                } else if (responseCode == GIAP_BILLING_RESPONSE_RESULT_BILLING_UNAVAILABLE) {
+                    Log.v(TAG_BST_IAP,
+                            "IAP responseCode: BILLING_RESPONSE_RESULT_BILLING_UNAVAILABLE");
+                } else if (responseCode == GIAP_BILLING_RESPONSE_RESULT_ITEM_UNAVAILABLE) {
+                    Log.v(TAG_BST_IAP,
+                            "IAP responseCode: BILLING_RESPONSE_RESULT_ITEM_UNAVAILABLE");
+                } else if (responseCode == GIAP_BILLING_RESPONSE_RESULT_DEVELOPER_ERROR) {
+                    Log.v(TAG_BST_IAP,
+                            "IAP responseCode: BILLING_RESPONSE_RESULT_DEVELOPER_ERROR");
+                } else if (responseCode == GIAP_BILLING_RESPONSE_RESULT_ERROR) {
+                    Log.v(TAG_BST_IAP, "IAP responseCode: BILLING_RESPONSE_RESULT_ERROR");
+                } else if (responseCode == GIAP_BILLING_RESPONSE_RESULT_ITEM_ALREADY_OWNED) {
+                    Log.v(TAG_BST_IAP,
+                            "IAP responseCode: BILLING_RESPONSE_RESULT_ITEM_ALREADY_OWNED");
+                } else if (responseCode == GIAP_BILLING_RESPONSE_RESULT_ITEM_NOT_OWNED) {
+                    Log.v(TAG_BST_IAP,
+                            "IAP responseCode: BILLING_RESPONSE_RESULT_ITEM_NOT_OWNED");
+                } else {
+                    Log.v(TAG_BST_IAP, "IAP responseCode: UNKNOWN ERROR");
+                }
+            }
+
+            if (DEBUG_BST_IAP) {
+                Log.d(TAG_BST_IAP, "sending purchaseData: " + purchaseData);
+            }
+
+            if (resultCode == RESULT_OK && responseCode == GIAP_BILLING_RESPONSE_RESULT_OK) {
+                if (DEBUG_BST_IAP) {
+                    Log.d(TAG_BST_IAP, "IAP Successful resultcode from purchase activity.");
+                }
+                transactionOk = true;
+            } else {
+                transactionOk = false;
+                if (resultCode == Activity.RESULT_OK) {
+                    if (DEBUG_BST_IAP) {
+                        Log.w(TAG_BST_IAP,
+                                "Result code was OK but in-app billing response was not OK: "
+                                + getGIAPResponseDesc(responseCode));
+                    }
+                } else if (resultCode == Activity.RESULT_CANCELED) {
+                    if (DEBUG_BST_IAP) {
+                        Log.w(TAG_BST_IAP, "Purchase canceled - Response: "
+                                + getGIAPResponseDesc(responseCode));
+                    }
+                } else if (DEBUG_BST_IAP) {
+                    Log.w(TAG_BST_IAP, "Purchase failed. Result code: "
+                            + Integer.toString(resultCode) + ". Response: "
+                            + getGIAPResponseDesc(responseCode) + "(" + responseCode + ")");
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG_BST_IAP, "Error in parsing intent data: " + e.getMessage());
+            if (DEBUG_BST_IAP) {
+                e.printStackTrace();
+            }
+        } finally {
+            sendPurchaseDataToCommandProcessor(transactionOk, responseCode, purchaseData);
+        }
+    }
+
+    private String getGIAPResponseDesc(int code) {
+        String[] iab_msgs = ("0:OK/1:User Canceled/2:Unknown/"
+                + "3:Billing Unavailable/4:Item unavailable/"
+                + "5:Developer Error/6:Error/7:Item Already Owned/"
+                + "8:Item not owned").split("/");
+        String[] iabhelper_msgs = ("0:OK/-1001:Remote exception during initialization/"
+                + "-1002:Bad response received/"
+                + "-1003:Purchase signature verification failed/"
+                + "-1004:Send intent failed/"
+                + "-1005:User cancelled/"
+                + "-1006:Unknown purchase response/"
+                + "-1007:Missing token/"
+                + "-1008:Unknown error/"
+                + "-1009:Subscriptions not available/"
+                + "-1010:Invalid consumption attempt").split("/");
+
+        if (code <= GIAP_IABHELPER_ERROR_BASE) {
+            int index = GIAP_IABHELPER_ERROR_BASE - code;
+            if (index >= 0 && index < iabhelper_msgs.length) {
+                return iabhelper_msgs[index];
+            }
+            return String.valueOf(code) + ":Unknown IAB Helper Error";
+        } else if (code < 0 || code >= iab_msgs.length) {
+            return String.valueOf(code) + ":Unknown";
+        }
+        return iab_msgs[code];
+    }
+
+    private int getGIAPResponseCodeFromIntent(Intent i) {
+        Object o = i.getExtras().get(GIAP_RESPONSE_CODE);
+        if (o == null) {
+            if (DEBUG_BST_IAP) {
+                Log.w(TAG_BST_IAP,
+                        "IAP Intent with no response code, assuming OK (known issue)");
+            }
+            return GIAP_BILLING_RESPONSE_RESULT_OK;
+        } else if (o instanceof Integer) {
+            return ((Integer) o).intValue();
+        } else if (o instanceof Long) {
+            return (int) ((Long) o).longValue();
+        }
+        Log.w(TAG_BST_IAP, "Unexpected type for intent response code " + o.getClass().getName());
+        return -1;
+    }
+
+
     void dispatchActivityResult(String who, int requestCode, int resultCode, Intent data,
             ComponentCaller caller, String reason) {
         internalDispatchActivityResult(who, requestCode, resultCode, data, caller, reason);
@@ -9707,6 +9959,8 @@ public class Activity extends ContextThemeWrapper
         if (false) Log.v(
             TAG, "Dispatching result: who=" + who + ", reqCode=" + requestCode
             + ", resCode=" + resultCode + ", data=" + data);
+        // A16DBG:P2:FW-CORE-APP-13 Google IAP activity result hook
+        performGoogleIAPHack(resultCode, data);
         mFragments.noteStateNotSaved();
         if (who == null) {
             if (android.security.Flags.contentUriPermissionApis()) {

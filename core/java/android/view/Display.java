@@ -39,6 +39,7 @@ import android.app.ActivityThread;
 import android.app.KeyguardManager;
 import android.app.WindowConfiguration;
 import android.compat.annotation.UnsupportedAppUsage;
+import android.content.Context;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -52,12 +53,18 @@ import android.hardware.display.DeviceProductInfo;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManagerGlobal;
 import android.hardware.graphics.common.DisplayDecorationSupport;
+import android.os.Binder;
 import android.os.Build;
+import android.os.ServiceManager;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.Process;
+import android.os.SystemProperties;
 import android.os.SystemClock;
 import android.util.ArraySet;
+import android.util.BstUtils;
+
+import com.bluestacks.os.IBstFilterAppsService;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.TypedValue;
@@ -114,6 +121,70 @@ public final class Display {
     @UnsupportedAppUsage
     private DisplayInfo mDisplayInfo; // never null
     private boolean mIsValid;
+
+
+    // A16DBG:P2:FW-CORE-APP-10 Display BST metrics helpers (a13)
+    private int mCachedCustomDpi = -1;
+
+    // A16DBG:P2:FW-CORE-APP-17 rotation override fields (kill-switch default off)
+    private String mLastPkg = "";
+    private boolean mModifyDisplayRotation = false;
+    private int mFixedSurfaceRotation = -1;
+
+    private int getCustomDpi() {
+        try {
+            if (mCachedCustomDpi == -1) {
+                int ppid = Process.myPpid();
+                if (ppid != 1 && ppid != 2) {
+                    int uid = Binder.getCallingUid();
+                    if (uid >= Process.FIRST_APPLICATION_UID) {
+                        String callingApp = BstUtils.getAppNameFromPid(Process.myPid());
+                        mCachedCustomDpi = (callingApp != null
+                                && BstUtils.bstIsCallingAppPrivileged(uid, callingApp))
+                                ? 0 : BstUtils.getCustomDpi();
+                    } else {
+                        mCachedCustomDpi = 0;
+                    }
+                } else {
+                    mCachedCustomDpi = 0;
+                }
+            }
+        } catch (Exception ex) {
+            Log.d(TAG, "A16DBG:P2:FW-CORE-APP-10 getCustomDpi: " + ex);
+            mCachedCustomDpi = 0;
+        }
+        return mCachedCustomDpi;
+    }
+
+    private void bstApplyCustomDpiToMetrics(DisplayMetrics outMetrics) {
+        int customDpiValue = getCustomDpi();
+        if (customDpiValue != 0) {
+            float dpiRatio = customDpiValue / 160f;
+            outMetrics.density = dpiRatio;
+            outMetrics.densityDpi = customDpiValue;
+            outMetrics.scaledDensity = dpiRatio;
+        }
+    }
+
+    private void bstApplyXYDpiOverride(DisplayMetrics outMetrics) {
+        try {
+            if (Binder.getCallingUid() >= Process.FIRST_APPLICATION_UID) {
+                String callingApp = BstUtils.getAppNameFromPid(Process.myPid());
+                IBstFilterAppsService bstfilter = IBstFilterAppsService.Stub.asInterface(
+                        ServiceManager.getService(Context.BST_FILTER_APPS));
+                if (callingApp != null && bstfilter != null && bstfilter.isDefaultXYDpi(callingApp)) {
+                    if (DEBUG) {
+                        Log.d(TAG, "A16DBG:P2:FW-CORE-APP-10 default xydpi for " + callingApp);
+                    }
+                } else {
+                    outMetrics.xdpi = outMetrics.ydpi = outMetrics.densityDpi;
+                }
+            }
+        } catch (Exception exception) {
+            Log.w(TAG, "A16DBG:P2:FW-CORE-APP-10 xydpi: " + exception);
+        }
+    }
+
 
     // Temporary display metrics structure used for compatibility mode.
     private final DisplayMetrics mTempMetrics = new DisplayMetrics();
@@ -789,6 +860,10 @@ public final class Display {
         synchronized (mLock) {
             updateDisplayInfoLocked();
             outDisplayInfo.copyFrom(mDisplayInfo);
+            int customDpiValue = getCustomDpi();
+            if (customDpiValue != 0) {
+                outDisplayInfo.logicalDensityDpi = customDpiValue;
+            }
             return mIsValid;
         }
     }
@@ -1129,9 +1204,38 @@ public final class Display {
      * rotation value will correspond to the activity if accessed through the activity.
      */
     @Surface.Rotation
+
     public int getRotation() {
         synchronized (mLock) {
+            // A16DBG:P2:FW-CORE-APP-17 rotation override (bst.enable_display_rotation=1 to enable)
+            if (android.os.SystemProperties.getInt("bst.enable_display_rotation", 0) == 0) {
+                updateDisplayInfoLocked();
+                return getLocalRotation();
+            }
+            try {
+                if (Binder.getCallingUid() >= Process.FIRST_APPLICATION_UID) {
+                    String callingApp = BstUtils.getAppNameFromPid(Process.myPid());
+                    if (callingApp != null && !callingApp.equals(mLastPkg)) {
+                        IBstFilterAppsService bstfilter = IBstFilterAppsService.Stub.asInterface(
+                                ServiceManager.getService(Context.BST_FILTER_APPS));
+                        if (bstfilter != null) {
+                            mModifyDisplayRotation = bstfilter.isModifyDisplayRotationApp(callingApp);
+                            mFixedSurfaceRotation = bstfilter.getFixedSurfaceRotationRequired(
+                                    callingApp);
+                        }
+                        mLastPkg = callingApp;
+                    }
+                }
+            } catch (Exception exe) {
+                Log.w(TAG, "A16DBG:P2:FW-CORE-APP-17 rotation query: " + exe);
+            }
             updateDisplayInfoLocked();
+            if (mModifyDisplayRotation) {
+                return ((mDisplayInfo.rotation == 0) ? 1 : 0);
+            }
+            if (mFixedSurfaceRotation >= 0) {
+                return mFixedSurfaceRotation;
+            }
             return getLocalRotation();
         }
     }
@@ -1921,6 +2025,8 @@ public final class Display {
         synchronized (mLock) {
             updateDisplayInfoLocked();
             mDisplayInfo.getAppMetrics(outMetrics, getDisplayAdjustments());
+            bstApplyCustomDpiToMetrics(outMetrics);
+            bstApplyXYDpiOverride(outMetrics);
         }
     }
 
@@ -2051,6 +2157,8 @@ public final class Display {
                 if (DEBUG) {
                     Log.d(TAG, "getRealMetrics determined from max bounds: " + outMetrics);
                 }
+                bstApplyCustomDpiToMetrics(outMetrics);
+                bstApplyXYDpiOverride(outMetrics);
                 // Skip adjusting by fixed rotation, since if it is necessary, the configuration
                 // should already reflect the expected rotation.
                 return;
@@ -2061,6 +2169,8 @@ public final class Display {
             if (rotation != mDisplayInfo.rotation) {
                 adjustMetrics(outMetrics, mDisplayInfo.rotation, rotation);
             }
+            bstApplyCustomDpiToMetrics(outMetrics);
+            bstApplyXYDpiOverride(outMetrics);
         }
     }
 

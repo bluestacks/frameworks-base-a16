@@ -261,4 +261,18 @@ public final class LegacyPermissionManager {
             throw e.rethrowFromSystemServer();
         }
     }
+
+    /**
+     * Grant permissions to specified bst apps.
+     * @param filepath The file that lists the bst apps.
+     * @hide
+     */
+    public void assignPermissionsToBstApps(@NonNull String filepath) {
+        try {
+            mLegacyPermissionManager.assignPermissionsToBstApps(filepath);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
 }

@@ -63,6 +63,7 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.ParcelableParcel;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.provider.Settings;
 import android.text.DynamicLayout;
 import android.text.Editable;
@@ -164,6 +165,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import com.bluestacks.os.BstHostCallManager;
+
 /**
  * Helper class used by TextView to handle editable text views.
  *
@@ -171,6 +174,7 @@ import java.util.Objects;
  */
 public class Editor {
     private static final String TAG = "Editor";
+    private static final boolean BST_DEBUG = SystemProperties.getInt("bst.debug.editor", 0) > 0;
     private static final boolean DEBUG_UNDO = false;
 
     // Specifies whether to use the magnifier when pressing the insertion or selection handles.
@@ -249,6 +253,7 @@ public class Editor {
     private boolean mSelectionControllerEnabled;
 
     private final boolean mHapticTextHandleEnabled;
+    private BstHostCallManager mBstHostCallManagerService;
     /** Handles OnBackInvokedCallback back dispatch */
     private final OnBackInvokedCallback mBackCallback = this::stopTextActionMode;
     private boolean mBackCallbackRegistered;
@@ -480,6 +485,8 @@ public class Editor {
     @VisibleForTesting
     public Editor(TextView textView) {
         mTextView = textView;
+        mBstHostCallManagerService = (BstHostCallManager) mTextView.getContext()
+                .getSystemService(Context.BST_HOST_CALL);
         // Synchronize the filter list, which places the undo input filter at the end.
         mTextView.setFilters(mTextView.getFilters());
         mDoubleTapTimeoutMillis =
@@ -2468,6 +2475,8 @@ public class Editor {
 
         final boolean clamped = layout.shouldClampCursor(line);
         updateCursorPosition(top, bottom, layout.getPrimaryHorizontal(transformedOffset, clamped));
+        // A16DBG:P2:FW-CORE-APP-6
+        bstSendCursorLocation();
     }
 
     void refreshTextActionMode() {
@@ -2899,6 +2908,41 @@ public class Editor {
                 bottom + mTempRect.bottom);
     }
 
+    // A16DBG:P2:FW-CORE-APP-6 send cursor position to host (a13 text_mode)
+    void bstSendCursorLocation() {
+        if (mBlink == null) {
+            return;
+        }
+        Layout layout = mTextView.getLayout();
+        boolean isTextEditModeEnabled = SystemProperties.getBoolean(
+                "bst.config.text_mode_enabled", false);
+        if (BST_DEBUG) {
+            Log.d(TAG, "A16DBG:P2:FW-CORE-APP-6 text_mode=" + isTextEditModeEnabled
+                    + " prev=(" + mBlink.mBstPrevCursorX + "," + mBlink.mBstPrevCursorY + ")");
+        }
+        if (mTextView != null && layout != null && mBlink.mBstIsBlinking && isTextEditModeEnabled
+                && mBstHostCallManagerService != null) {
+            int[] cursorXY = new int[2];
+            mTextView.getLocationOnScreen(cursorXY);
+            final int offset = mTextView.getSelectionStart();
+            final int transformedOffset = mTextView.originalToTransformed(offset,
+                    OffsetMapping.MAP_STRATEGY_CURSOR);
+            final int line = layout.getLineForOffset(transformedOffset);
+            final float insertionMarkerX = layout.getPrimaryHorizontal(transformedOffset,
+                    layout.shouldClampCursor(line)) + mTextView.viewportToContentHorizontalOffset();
+            final float insertionMarkerBottom = layout.getLineBottom(line,
+                    /* includeLineSpacing= */ false) + mTextView.viewportToContentVerticalOffset();
+            cursorXY[0] = cursorXY[0] + (int) Math.ceil(insertionMarkerX);
+            cursorXY[1] = cursorXY[1] + (int) Math.ceil(insertionMarkerBottom);
+            if (mBlink.mBstPrevCursorX != cursorXY[0] || mBlink.mBstPrevCursorY != cursorXY[1]) {
+                mBstHostCallManagerService.onCursorLocationChanged(cursorXY[0], cursorXY[1]);
+                mBlink.mBstPrevCursorX = cursorXY[0];
+                mBlink.mBstPrevCursorY = cursorXY[1];
+            }
+        }
+    }
+
+
     /**
      * Return clamped position for the drawable. If the drawable is within the boundaries of the
      * view, then it is offset with the left padding of the cursor drawable. If the drawable is at
@@ -3014,6 +3058,9 @@ public class Editor {
 
     private class Blink implements Runnable {
         private boolean mCancelled;
+        private boolean mBstIsBlinking = false;
+        private int mBstPrevCursorX = -1;
+        private int mBstPrevCursorY = -1;
 
         public void run() {
             if (mCancelled) {
@@ -3024,6 +3071,8 @@ public class Editor {
 
             if (shouldBlink()) {
                 if (mTextView.getLayout() != null) {
+                    mBstIsBlinking = true;
+                    bstSendCursorLocation();
                     mTextView.invalidateCursorPath();
                 }
 
@@ -3035,6 +3084,7 @@ public class Editor {
             if (!mCancelled) {
                 mTextView.removeCallbacks(this);
                 mCancelled = true;
+                mBstIsBlinking = false;
             }
         }
 

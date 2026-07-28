@@ -79,6 +79,12 @@ import java.util.List;
 import java.util.Objects;
 import java.util.StringJoiner;
 import java.util.concurrent.TimeoutException;
+import android.view.Gravity;
+import android.widget.Toast;
+import com.bluestacks.os.BstFilterAppsManager;
+import com.bluestacks.os.BstHostCallManager;
+import com.bluestacks.os.BstUtilsManager;
+import org.json.JSONObject;
 
 /**
  * Base class for implementing application instrumentation code.  When running
@@ -111,6 +117,105 @@ public class Instrumentation {
      * @hide
      */
     public static final String TAG = "Instrumentation";
+
+    // A16DBG:P2:FW-CORE-APP-3 BST instrumentation foundation (a13)
+    private static final String BST_TAG = "Bst-Instrumentation";
+    private static final String BST_TAG_REFERRAL = "Bst-Instrumentation-Affiliate";
+    private static final boolean BST_DBG = SystemProperties.getInt("bst.debug.instrumentation", 0) > 0;
+    private static final boolean BST_DBG_REFERRAL = BST_DBG || SystemProperties.getInt("bst.debug.referral", 0) > 0;
+
+    /** @hide
+     * a13: handle market:// mailto: gm/maps/youtube/vending unresolved intents with a Toast (no crash). */
+    public int bstHandleProprietryIntents(@Nullable Context who, int result, @Nullable Intent intent) {
+        try {
+            if (who == null || intent == null) return result;
+            String data = "";
+            if (intent.getData() != null) data = intent.getData().toString().toLowerCase();
+            ComponentName mComponent = intent.getComponent();
+            Log.w(BST_TAG, "Unresolved intent: cmp: " + mComponent + " data: " + data);
+            if (data.startsWith("market:")) {
+                result = ActivityManager.START_SUCCESS;
+                Toast t = Toast.makeText(who, "Sorry, this feature is not supported currently", Toast.LENGTH_LONG);
+                t.setGravity(Gravity.BOTTOM, 0, 0); t.show();
+            } else if (data.startsWith("mailto:")) {
+                result = ActivityManager.START_SUCCESS;
+                Toast t = Toast.makeText(who, "This app requires an Email app to send e-mail. Please install one and retry this.", Toast.LENGTH_LONG);
+                t.setGravity(Gravity.BOTTOM, 0, 0); t.show();
+            } else if (mComponent != null) {
+                String cn = mComponent.flattenToShortString();
+                if (cn.startsWith("com.google.android.gm") && !cn.endsWith(".Main")) {
+                    result = ActivityManager.START_SUCCESS;
+                    Toast t = Toast.makeText(who, "This app requires GMail. Please install the GMail app and retry this.", Toast.LENGTH_LONG);
+                    t.setGravity(Gravity.BOTTOM, 0, 0); t.show();
+                } else if (cn.startsWith("com.google.android.apps.maps") && !cn.endsWith(".Main")) {
+                    result = ActivityManager.START_SUCCESS;
+                    Toast t = Toast.makeText(who, "This app requires Google Maps. Please install the Google Maps app and retry this.", Toast.LENGTH_LONG);
+                    t.setGravity(Gravity.BOTTOM, 0, 0); t.show();
+                } else if (cn.startsWith("com.google.android.youtube") && !cn.endsWith(".Main")) {
+                    result = ActivityManager.START_SUCCESS;
+                    Toast t = Toast.makeText(who, "This app requires YouTube. Please install the YouTube app and retry this.", Toast.LENGTH_LONG);
+                    t.setGravity(Gravity.BOTTOM, 0, 0); t.show();
+                } else if (cn.startsWith("com.google.android.voicesearch") && !cn.endsWith(".Main")) {
+                    result = ActivityManager.START_SUCCESS;
+                    Toast t = Toast.makeText(who, "This app requires Voice Search. Please install the Voice Search app and retry this.", Toast.LENGTH_LONG);
+                    t.setGravity(Gravity.BOTTOM, 0, 0); t.show();
+                } else if (cn.startsWith("com.android.vending") && !cn.endsWith(".Main")) {
+                    result = ActivityManager.START_SUCCESS;
+                    Toast t = Toast.makeText(who, "Sorry, this feature is not supported currently", Toast.LENGTH_LONG);
+                    t.setGravity(Gravity.BOTTOM, 0, 0); t.show();
+                }
+            }
+        } catch (Exception ex) {
+            Log.w(BST_TAG, "Exception occured while handling intent");
+        }
+        return result;
+    }
+
+    /** @hide
+     * a13: capture play-store/market referrer, notify BstCommandProcessor. */
+    public void bstReferrerHack(@Nullable Context context, @Nullable Intent mIntent) {
+        if (context == null || mIntent == null) return;
+        String intentData = mIntent.getDataString();
+        if (intentData == null) return;
+        if (BST_DBG_REFERRAL) Log.d(BST_TAG_REFERRAL, "intentData = " + intentData);
+        if (intentData.startsWith("https://play.google.com/store/apps/details")
+                || intentData.startsWith("http://play.google.com/store/apps/details")
+                || intentData.startsWith("https://market.android.com/details")
+                || intentData.startsWith("http://market.android.com/details")
+                || intentData.startsWith("market://details")) {
+            String packageName = null, referrer = null, value = "", key = "";
+            int q = intentData.indexOf("?");
+            String values = q >= 0 ? intentData.substring(q + 1) : "";
+            for (String str : values.split("&")) {
+                try {
+                    String[] keyValue = str.split("=");
+                    key = keyValue[0];
+                    if (keyValue.length > 1) value = keyValue[1];
+                    if (key.equals("id")) packageName = value;
+                    else if (key.equals("referrer")) referrer = value;
+                } catch (Exception e) {
+                    Log.e(BST_TAG_REFERRAL, "Exception parsing: " + str);
+                }
+            }
+            try {
+                Intent intent = new Intent();
+                if (referrer != null) {
+                    BstUtilsManager bstutils = (BstUtilsManager) context.getSystemService(Context.BST_UTILS);
+                    if (bstutils != null) bstutils.setProperty("bst.config.referrerpackage", packageName);
+                    intent.setAction("BST_UPDATE_REFERRERLIST_ADD");
+                } else {
+                    intent.setAction("BST_UPDATE_REFERRERLIST_REMOVE");
+                }
+                intent.setComponent(new ComponentName("com.bluestacks.BstCommandProcessor",
+                        "com.bluestacks.BstCommandProcessor.BstCommandProcessorService"));
+                intent.putExtra("packageName", packageName);
+                context.startService(intent);
+            } catch (Exception ex) {
+                Log.w(BST_TAG_REFERRAL, "Exception updating referrer list: " + ex.getMessage());
+            }
+        }
+    }
+
 
     private static final long CONNECT_TIMEOUT_MILLIS = 60_000;
 

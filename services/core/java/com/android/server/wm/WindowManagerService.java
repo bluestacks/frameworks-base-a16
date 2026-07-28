@@ -404,6 +404,13 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
+import android.accounts.Account;
+import android.accounts.AccountManager;
+
+import com.bluestacks.os.BstFilterAppsManager;
+import com.bluestacks.os.BstHostCallManager;
+
+
 /** @hide */
 public class WindowManagerService extends IWindowManager.Stub
         implements Watchdog.Monitor, WindowManagerPolicy.WindowManagerFuncs {
@@ -1134,6 +1141,9 @@ public class WindowManagerService extends IWindowManager.Stub
     final DisplayManager mDisplayManager;
     @NonNull
     final ActivityTaskManagerService mAtmService;
+    // R255 / Henry bstSendTopDisplayedOnFocusChange
+    final BstFilterAppsManager mBstFilterApps;
+    final BstHostCallManager mBstHostCallManagerService;
 
     /** Indicates whether this device supports wide color gamut / HDR rendering */
     private boolean mHasWideColorGamutSupport;
@@ -1350,6 +1360,10 @@ public class WindowManagerService extends IWindowManager.Stub
         mSurfaceControlFactory = surfaceControlFactory;
         mTransactionFactory = transactionFactory;
         mTransaction = mTransactionFactory.get();
+
+        // R255 / Henry bstSendTopDisplayedOnFocusChange
+        mBstFilterApps = (BstFilterAppsManager) context.getSystemService(Context.BST_FILTER_APPS);
+        mBstHostCallManagerService = (BstHostCallManager) context.getSystemService(Context.BST_HOST_CALL);
 
         mPolicy = policy;
         mAnimator = new WindowAnimator(this);
@@ -4161,6 +4175,11 @@ public class WindowManagerService extends IWindowManager.Stub
         mPolicy.onSystemUiStarted();
     }
 
+    /** @hide BlueStacks */
+    public void setBstProposedRotation(int proposedRotation) {
+        mPolicy.setBstProposedRotation(proposedRotation);
+    }
+
     private void performEnableScreen() {
         synchronized (mGlobalLock) {
             ProtoLog.i(WM_DEBUG_BOOT, "performEnableScreen: mDisplayEnabled=%b"
@@ -5001,6 +5020,11 @@ public class WindowManagerService extends IWindowManager.Stub
                     mWindowPlacerLocked.performSurfacePlacement();
                     Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
                 }
+            }
+            try {
+                sendOrientationToHostAsync(getDefaultDisplayRotation());
+            } catch (Exception e) {
+                Slog.w(TAG, "P2 sendOrientationToHostAsync: " + e);
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
@@ -6841,6 +6865,139 @@ public class WindowManagerService extends IWindowManager.Stub
     /** Note that Locked in this case is on mLayoutToAnim */
     void scheduleAnimationLocked() {
         mAnimator.scheduleAnimation();
+    }
+
+    // R259 / Henry: require ActivityRecord (no owningPackage fallback for systemui chrome).
+    // Also used by ActivityRecord RESUMED hook.
+    void bstSendTopDisplayedOnFocusChange(WindowState newFocus) {
+        if (newFocus == null) {
+            return;
+        }
+        final ActivityRecord activityRecord = newFocus.mActivityRecord;
+        if (activityRecord == null) {
+            return;
+        }
+        bstNotifyActivityDisplayed(activityRecord);
+    }
+
+
+    /**
+     * Send orientation update to HOST (P2 BatchC). Fail-open.
+     * @hide
+     */
+    public void sendOrientationToHostAsync(final int rotation) {
+        try {
+            BstHostCallManager hostCall = mBstHostCallManagerService;
+            if (hostCall == null) {
+                hostCall = (BstHostCallManager) mContext.getSystemService(Context.BST_HOST_CALL);
+            }
+            if (hostCall == null) {
+                return;
+            }
+            final BstHostCallManager hc = hostCall;
+            mH.post(() -> {
+                try {
+                    int rval = hc.onOrientationChange(rotation);
+                    if (rval != 0) {
+                        Slog.w(TAG, "P2 onOrientationChange rval=" + rval);
+                    }
+                } catch (Exception e) {
+                    Slog.w(TAG, "P2 onOrientationChange failed: " + e);
+                }
+            });
+        } catch (Exception e) {
+            Slog.w(TAG, "P2 sendOrientationToHostAsync: " + e);
+        }
+    }
+
+    void bstNotifyActivityDisplayed(ActivityRecord activityRecord) {
+        if (activityRecord == null) {
+            return;
+        }
+        BstHostCallManager hostCall = mBstHostCallManagerService;
+        if (hostCall == null) {
+            try {
+                hostCall = (BstHostCallManager) mContext.getSystemService(Context.BST_HOST_CALL);
+            } catch (Exception e) {
+                Slog.w(TAG, "R259: BST_HOST_CALL unavailable: " + e);
+                return;
+            }
+            if (hostCall == null) {
+                return;
+            }
+        }
+
+        String packageName = activityRecord.packageName;
+        String activityName = null;
+        if (activityRecord.mActivityComponent != null) {
+            activityName = activityRecord.mActivityComponent.getClassName();
+        } else if (activityRecord.intent != null
+                && activityRecord.intent.getComponent() != null) {
+            activityName = activityRecord.intent.getComponent().getClassName();
+        }
+        if (packageName == null || packageName.isEmpty()) {
+            return;
+        }
+        if (activityName == null || activityName.isEmpty()) {
+            activityName = packageName;
+        }
+        if (activityName.equalsIgnoreCase("com.android.settings.FallbackHome")) {
+            return;
+        }
+        // Host already ignores these; skip to avoid polluting top_displayed_pkg.
+        if (packageName.equals("android")
+                || packageName.equals("com.android.systemui")
+                || packageName.equals("com.android.settings")) {
+            return;
+        }
+
+        final String lastTopDisplayedPackage =
+                SystemProperties.get("bst.config.top_displayed_pkg", "");
+        if (packageName.equalsIgnoreCase(lastTopDisplayedPackage)) {
+            return;
+        }
+
+        try {
+            SystemProperties.set("bst.r259.last_pkg", packageName);
+            Slog.w(TAG, "R259 onActivityDisplayed package=" + packageName
+                    + " activity=" + activityName);
+            SystemProperties.set("bst.config.top_displayed_pkg", packageName);
+            SystemProperties.set("bst.config.show_mouse_ptr", "false");
+            String callingPackage = SystemProperties.get("bst.config.calling_package", "");
+            int rval = hostCall.onActivityDisplayed(packageName, activityName, callingPackage);
+            if (rval != 0) {
+                Slog.w(TAG, "R259 onActivityDisplayed rval=" + rval);
+            }
+
+            // P2 BatchC: app-config + mouse (fail-open)
+            try {
+                if (mBstFilterApps != null) {
+                    boolean macrosDisabled = mBstFilterApps.isMacrosDisabledApp(packageName);
+                    boolean showFeedbackPopup = mBstFilterApps.showFeedbackPopup(packageName);
+                    String mouseCursorStyle = mBstFilterApps.getMouseCursorStyle(packageName);
+                    boolean nativeGamepad = mBstFilterApps.isEnableNativeGamePad(packageName);
+                    int cfg = hostCall.setAppConfigDbParams(packageName, macrosDisabled,
+                            showFeedbackPopup, mouseCursorStyle, nativeGamepad);
+                    if (cfg != 0) {
+                        Slog.w(TAG, "P2 setAppConfigDbParams rval=" + cfg);
+                    }
+                    String mouseAction = mBstFilterApps.getMouseAction(packageName, activityName);
+                    String lastSentMouseAction =
+                            SystemProperties.get("bst.config.last_mouse_action", "");
+                    if (!mouseAction.isEmpty() || !lastSentMouseAction.isEmpty()) {
+                        int mr = hostCall.onSetMouseAction(packageName, activityName, mouseAction);
+                        SystemProperties.set("bst.config.last_mouse_action", mouseAction);
+                        if (mr != 0) {
+                            Slog.w(TAG, "P2 onSetMouseAction rval=" + mr);
+                        }
+                    }
+                }
+            } catch (Exception cfgEx) {
+                Slog.w(TAG, "P2 appconfig/mouse after ActivityDisplayed: " + cfgEx);
+            }
+        } catch (Exception ex) {
+            Slog.w(TAG, "R259 bstNotifyActivityDisplayed failed: " + ex);
+        }
     }
 
     boolean updateFocusedWindowLocked(int mode, boolean updateInputWindows) {

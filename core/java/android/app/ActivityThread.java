@@ -65,6 +65,7 @@ import android.app.servertransaction.ActivityLifecycleItem.LifecycleState;
 import android.app.servertransaction.ActivityRelaunchItem;
 import android.app.servertransaction.ActivityResultItem;
 import android.app.servertransaction.ClientTransaction;
+import android.app.servertransaction.ClientTransactionItem;
 import android.app.servertransaction.ClientTransactionListenerController;
 import android.app.servertransaction.DestroyActivityItem;
 import android.app.servertransaction.PauseActivityItem;
@@ -262,6 +263,8 @@ import com.android.org.conscrypt.TrustedCertificateStore;
 import com.android.server.am.BitmapDumpProto;
 import com.android.server.am.MemInfoDumpProto;
 
+import com.bluestacks.os.BstFilterAppsManager;
+
 import dalvik.annotation.optimization.NeverCompile;
 import dalvik.annotation.optimization.NeverInline;
 import dalvik.system.AppSpecializationHooks;
@@ -283,6 +286,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Executable;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.nio.file.DirectoryStream;
@@ -2527,6 +2531,93 @@ public final class ActivityThread extends ClientTransactionHandler
         throw new ForegroundServiceDidNotStartInTimeException(message, inner);
     }
 
+    // A16DBG:P2:FW-CORE-APP-16 UE High FPS console commands (a13)
+    private int mMaxFps = 60;
+
+    private int processUEHighFPS(String processName, int fps) {
+        try {
+            WeakReference<LoadedApk> weakReference = (WeakReference) this.mPackages.get(processName);
+            if (weakReference == null) {
+                return 0;
+            }
+            ClassLoader classLoader = weakReference.get().getClassLoader();
+            Class<?> clazz = null;
+            try {
+                clazz = classLoader.loadClass("com.epicgames.unreal.GameActivity");
+            } catch (ClassNotFoundException e) {
+                try {
+                    clazz = classLoader.loadClass("com.epicgames.ue4.GameActivity");
+                } catch (ClassNotFoundException ex) {
+                    return 0;
+                }
+            }
+            if (clazz == null) {
+                return 0;
+            }
+            Method method = clazz.getMethod("nativeConsoleCommand", String.class);
+            Object obj = clazz.getConstructor().newInstance();
+            if (obj == null || method == null) {
+                return 0;
+            }
+            method.setAccessible(true);
+            method.invoke(obj, "t.MaxFPS " + fps);
+            method.invoke(obj, "r.SetFramePace " + fps);
+        } catch (Exception exception) {
+            exception.printStackTrace();
+        }
+        return 0;
+    }
+
+
+    // A16DBG:P2:FW-CORE-APP-8 ActivityThread BST helpers (a13 IAP redirect)
+    private static Object bstGetDeclaredField(Object instance, String fieldName) {
+        try {
+            Field field = instance.getClass().getDeclaredField(fieldName);
+            field.setAccessible(true);
+            return field.get(instance);
+        } catch (ReflectiveOperationException e) {
+            // fall through
+        }
+        return null;
+    }
+
+    private void bstRedirectProxyBillingIfNeeded(ClientTransaction transaction) {
+        List<ClientTransactionItem> clientCallbacks = transaction.getCallbacks();
+        if (clientCallbacks == null) {
+            return;
+        }
+        BstFilterAppsManager bfam = (BstFilterAppsManager)
+                getSystemContext().getSystemService(Context.BST_FILTER_APPS);
+        if (bfam == null) {
+            return;
+        }
+        for (ClientTransactionItem item : clientCallbacks) {
+            Intent launchIntent = (Intent) bstGetDeclaredField(item, "mIntent");
+            ComponentName origComponent =
+                    launchIntent != null ? launchIntent.getComponent() : null;
+            if (launchIntent == null || origComponent == null) {
+                continue;
+            }
+            if (!"com.android.billingclient.api.ProxyBillingActivity".equals(
+                    origComponent.getClassName())) {
+                continue;
+            }
+            Slog.d(TAG, "A16DBG:P2:FW-CORE-APP-8 proxy billing " + origComponent);
+            if (launchIntent.hasExtra("bst_hooked")) {
+                continue;
+            }
+            String iapSetting = bfam.getIapSetting(origComponent.getPackageName());
+            if (iapSetting == null || iapSetting.isEmpty()) {
+                continue;
+            }
+            launchIntent.setComponent(new ComponentName(
+                    origComponent.getPackageName(),
+                    "com.android.internal.app.PaymentRedirectProxyActivity"));
+            launchIntent.putExtra("bst_iap_setting", iapSetting);
+        }
+    }
+
+
     private ForegroundServiceDidNotStopInTimeException
             generateForegroundServiceDidNotStopInTimeException(String message, Bundle extras) {
         final String serviceClassName =
@@ -2958,6 +3049,7 @@ public final class ActivityThread extends ClientTransactionHandler
                             ClientTransactionListenerController.getInstance();
                     controller.onClientTransactionStarted();
                     try {
+                        bstRedirectProxyBillingIfNeeded(transaction);
                         mTransactionExecutor.execute(transaction);
                     } finally {
                         controller.onClientTransactionFinished();
@@ -8058,6 +8150,45 @@ public final class ActivityThread extends ClientTransactionHandler
             mInstrumentation.basicInit(this);
         }
 
+        // A16DBG:P2:FW-CORE-APP-16 default profile file bootstrap (a13)
+        BstFilterAppsManager bfam = (BstFilterAppsManager)
+                getSystemContext().getSystemService(Context.BST_FILTER_APPS);
+        if (bfam != null) {
+            String bstPackageName = data.info.getPackageName();
+            String appsProfile = bfam.getDefaultProfile(bstPackageName);
+            if (appsProfile != null && appsProfile.length() > 1) {
+                try {
+                    String spFilename = appsProfile.substring(
+                            appsProfile.indexOf('=') + 1, appsProfile.indexOf(','));
+                    String spKeyValueSequences = appsProfile.substring(
+                            appsProfile.indexOf(('='), spFilename.length()) + 1);
+                    int scoreAbove = bfam.getPScoreAbove(bstPackageName);
+                    File file = new File(spFilename);
+                    if (!file.exists()
+                            && SystemProperties.getInt("bst.pscore", 180) > scoreAbove) {
+                        File parentDir = file.getParentFile();
+                        if (parentDir != null && !parentDir.exists()) {
+                            if (spFilename.startsWith("/sdcard/Android/data/")) {
+                                ContextImpl.getImpl(appContext).getExternalFilesDir(null);
+                            }
+                            parentDir.mkdirs();
+                            parentDir.setReadable(true, false);
+                            parentDir.setWritable(true, false);
+                        }
+                        file.createNewFile();
+                        FileOutputStream fos = new FileOutputStream(file);
+                        fos.write(spKeyValueSequences.getBytes());
+                        file.setReadable(true, false);
+                        file.setWritable(true, false);
+                        fos.close();
+                    }
+                } catch (Exception e) {
+                    Slog.e(TAG, "A16DBG:P2:FW-CORE-APP-16 bst create default profile failed!");
+                }
+            }
+        }
+
+
         if ((data.appInfo.flags&ApplicationInfo.FLAG_LARGE_HEAP) != 0) {
             dalvik.system.VMRuntime.getRuntime().clearGrowthLimit();
         } else {
@@ -8147,8 +8278,9 @@ public final class ActivityThread extends ClientTransactionHandler
         } finally {
             // If the app targets < O-MR1, or doesn't change the thread policy
             // during startup, clobber the policy to maintain behavior of b/36951662
-            if (data.appInfo.targetSdkVersion < Build.VERSION_CODES.O_MR1
-                    || StrictMode.getThreadPolicy().equals(writesAllowedPolicy)) {
+            boolean isBstPkg = data.info.getPackageName().toLowerCase().startsWith("com.bluestacks.");
+            if (!isBstPkg && (data.appInfo.targetSdkVersion < Build.VERSION_CODES.O_MR1
+                    || StrictMode.getThreadPolicy().equals(writesAllowedPolicy))) {
                 StrictMode.setThreadPolicy(savedPolicy);
             }
         }
@@ -8173,6 +8305,48 @@ public final class ActivityThread extends ClientTransactionHandler
                 throw e.rethrowFromSystemServer();
             }
         }
+
+        // A16DBG:P2:FW-CORE-APP-16 UE High FPS loop for Unreal/UE4 apps (a13)
+        if (!data.appInfo.isPrivilegedApp() && !data.appInfo.isSystemApp() && bfam != null) {
+            do {
+                final String className = data.appInfo.className;
+                if (className == null) {
+                    Log.w(TAG, "Empty className detected for process: " + data.processName);
+                    break;
+                }
+                if (!className.equals("com.epicgames.unreal.GameApplication")
+                        && !className.equals("com.epicgames.ue4.GameApplication")) {
+                    break;
+                }
+                final int mode = bfam.getXperfMode(data.appInfo.uid);
+                final int enableHighFps = SystemProperties.getInt("bst.enable_high_fps", 0);
+                final boolean enable = (mode == 2) || (mode == 1 && enableHighFps > 0);
+                if (!enable) {
+                    break;
+                }
+                mMaxFps = SystemProperties.getInt("bst.max_fps", 60);
+                if (mMaxFps > 120) {
+                    mMaxFps = 120;
+                } else if (mMaxFps < 60) {
+                    Log.w(TAG, "Invalid fps range: " + mMaxFps);
+                    break;
+                }
+                Log.i(TAG, "Applying fps optimization for " + className + ", target=" + mMaxFps);
+                (new Thread(() -> {
+                    while (!Thread.currentThread().isInterrupted()) {
+                        new Handler(Looper.getMainLooper()).post(() -> {
+                            ActivityThread.this.processUEHighFPS(data.processName, mMaxFps);
+                        });
+                        try {
+                            Thread.sleep(1000);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }
+                })).start();
+            } while (false);
+        }
+
 
         try {
             mgr.finishAttachApplication(mStartSeq, timestampApplicationOnCreateNs);

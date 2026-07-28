@@ -59,6 +59,7 @@ import android.os.ParcelUuid;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.os.SystemProperties;
 import android.provider.Telephony.SimInfo;
 import android.telephony.euicc.EuiccManager;
 import android.telephony.ims.ImsMmTelManager;
@@ -2321,6 +2322,10 @@ public class SubscriptionManager {
      */
     @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     public int getActiveSubscriptionInfoCount() {
+        // A16DBG:P2:DEF BST fake subscription count (a13; anti-detection)
+        if (SystemProperties.getBoolean("bst.config.enable_telephony", true)) {
+            return 1;
+        }
         int result = 0;
 
         try {

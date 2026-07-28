@@ -699,6 +699,10 @@ public class LockPatternUtils {
      */
     @UnsupportedAppUsage
     public boolean isLockScreenDisabled(int userId) {
+        // R258 / Henry BS-A16: force lockscreen disabled
+        // Without this, SystemUI keyguard steals window focus from the launcher
+        // and blocks HCALL onActivityDisplayed -> HD overlay never clears.
+        /*
         if (isSecure(userId)) {
             return false;
         }
@@ -710,6 +714,8 @@ public class LockPatternUtils {
         return getBoolean(DISABLE_LOCKSCREEN_KEY, false, userId)
                 || disabledByDefault
                 || isDemoUser;
+        */
+        return true;
     }
 
     /**

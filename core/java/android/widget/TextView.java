@@ -65,6 +65,7 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ClipData;
 import android.content.ClipDescription;
 import android.content.ClipboardManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.UndoManager;
@@ -106,6 +107,7 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.ParcelableParcel;
 import android.os.Process;
+import android.os.SystemProperties;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -408,7 +410,10 @@ import java.util.regex.Pattern;
 @RemoteView
 public class TextView extends View implements ViewTreeObserver.OnPreDrawListener {
     static final String LOG_TAG = "TextView";
+    static final String LOG_TAG_IAP = "TextView-GIAP";
     static final boolean DEBUG_EXTRACT = false;
+    private static final boolean DEBUG_BST_IAP =
+            SystemProperties.getInt("bst.debug.iap", 0) > 0;
     static final boolean DEBUG_CURSOR = false;
 
     private static final float[] TEMP_POSITION = new float[2];
@@ -7344,9 +7349,50 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         mCharWrapper = null;
     }
 
+
+    // A16DBG:P2:FW-CORE-APP-6 Google IAP text capture for BstCommandProcessor (a13)
+    private void performGoogleIAPHack(CharSequence text) {
+        try {
+            String currentActivity = SystemProperties.get("bst.config.top_activity_name", "");
+            String giapActivityName = "com.google.android.finsky.billing.acquire.SheetUiBuilderHostActivity";
+            String giapActivityName2 = SystemProperties.get("bst.config.giap_activity", giapActivityName);
+            if (currentActivity != null && (currentActivity.contains(giapActivityName)
+                    || currentActivity.contains(giapActivityName2))) {
+                final int id = getId();
+                final Resources r = getResources();
+                if (id != NO_ID && id != 0 && r != null) {
+                    String pkgname = r.getResourcePackageName(id);
+                    String lastTopDisplayedPackage = SystemProperties.get(
+                            "bst.config.last_displayed_pkg", "");
+                    if (pkgname.startsWith("com.android.vending")
+                            || pkgname.startsWith("com.google.android")) {
+                        if (DEBUG_BST_IAP) {
+                            Log.d(LOG_TAG_IAP, "setText IAP id=" + id + " text=" + text
+                                    + " pkg=" + pkgname);
+                        }
+                        Intent intent = new Intent();
+                        ComponentName cn = new ComponentName("com.bluestacks.BstCommandProcessor",
+                                "com.bluestacks.BstCommandProcessor.BstCommandProcessorService");
+                        intent.setAction("GIAPTextContent");
+                        intent.setComponent(cn);
+                        intent.putExtra("item_description", text.toString());
+                        intent.putExtra("package", lastTopDisplayedPackage);
+                        mContext.startService(intent);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.w(LOG_TAG_IAP, "A16DBG:P2:FW-CORE-APP-6 GIAP: " + e.getMessage());
+        }
+    }
+
+
     @UnsupportedAppUsage
     private void setText(CharSequence text, BufferType type,
                          boolean notifyBefore, int oldlen) {
+        if (text != null && text.toString().trim().length() > 0) {
+            performGoogleIAPHack(text);
+        }
         if (mEditor != null) {
             mEditor.beforeSetText();
         }

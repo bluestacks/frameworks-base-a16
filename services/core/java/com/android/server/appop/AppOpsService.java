@@ -3192,7 +3192,9 @@ public class AppOpsService extends IAppOpsService.Stub {
             // one (e.g., "root") which isn't actually existed.
             if (resolveNonAppUid(packageName) == uid
                     || (isPackageExisted(packageName)
-                            && !filterAppAccessUnlocked(packageName, UserHandle.getUserId(uid)))) {
+                            && !filterAppAccessUnlocked(packageName, UserHandle.getUserId(uid)))
+                    // A16DBG:P2:FW-SERVICES-4a synthetic package for device details (a13)
+                    || packageName.equals("com.bluestacks.devicedetails")) {
                 return AppOpsManager.MODE_ALLOWED;
             }
             return AppOpsManager.MODE_ERRORED;

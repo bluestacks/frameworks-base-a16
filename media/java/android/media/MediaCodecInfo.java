@@ -119,6 +119,13 @@ public final class MediaCodecInfo {
      */
     @NonNull
     public final String getName() {
+        // A16DBG:P2:FW-PERIPH ROB-10676 swap h264 encoder name for whatsapp (a13)
+        if ("OMX.google.h264.encoder".equals(mName)) {
+            String topPackageName = android.os.SystemProperties.get("bst.config.top_package_name", null);
+            if (topPackageName != null && topPackageName.startsWith("com.whatsapp")) {
+                return "c2.android.avc.encoder";
+            }
+        }
         return mName;
     }
 

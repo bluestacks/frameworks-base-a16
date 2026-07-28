@@ -47,6 +47,7 @@ public class ActivityTaskManagerDebugConfig {
     static final boolean DEBUG_RECENTS_TRIM_TASKS = DEBUG_RECENTS || false;
     static final boolean DEBUG_ROOT_TASK = DEBUG_ALL || false;
     public static final boolean DEBUG_SWITCH = DEBUG_ALL || false;
+    static final boolean DEBUG_TASKS = DEBUG_ALL || false;
     static final boolean DEBUG_TRANSITION = DEBUG_ALL || false;
     static final boolean DEBUG_VISIBILITY = DEBUG_ALL || false;
     static final boolean DEBUG_APP = DEBUG_ALL_ACTIVITIES || false;

@@ -118,6 +118,8 @@ import com.android.server.contentcapture.ContentCaptureManagerInternal;
 import com.android.server.uri.UriGrantsManagerInternal;
 import com.android.server.wm.WindowManagerInternal;
 
+import com.bluestacks.os.BstHostCallManager;
+
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -180,6 +182,7 @@ public class ClipboardService extends SystemService {
     @GuardedBy("mLock")
     // Maps (userId, deviceId) to Clipboard.
     private final SparseArrayMap<Integer, Clipboard> mClipboards = new SparseArrayMap<>();
+    private BstHostCallManager mBstHostCallManagerService;
 
     /**
      * Maps the uid to the time that clip access notification/toast suppression should end.
@@ -991,6 +994,28 @@ public class ClipboardService extends SystemService {
             return;
         }
         setPrimaryClipInternalLocked(clipboard, clip, uid, sourcePackage);
+
+        // A16DBG:P2:FW-SERVICES-1a ClipboardService — host clipboard sync (a13)
+        if (mBstHostCallManagerService == null) {
+            mBstHostCallManagerService = (BstHostCallManager) getContext().getSystemService(
+                    Context.BST_HOST_CALL);
+        }
+        if (mBstHostCallManagerService != null && clip != null
+                && (clip.getDescription() == null
+                || clip.getDescription().getLabel() == null
+                || !clip.getDescription().getLabel().toString().equals("simpleText"))) {
+            ClipData.Item clippedItem = clip.getItemAt(clip.getItemCount() - 1);
+            if (clippedItem != null && clippedItem.getText() != null
+                    && clippedItem.getText().length() > 0) {
+                int rval = mBstHostCallManagerService.setClipboardText(
+                        clippedItem.getText().toString());
+                Slog.d(TAG, "A16DBG:P2:FW-SERVICES-1a setClipboardText rval=" + rval);
+                if (rval != 0) {
+                    Slog.w(TAG, "A16DBG:P2:FW-SERVICES-1a setClipboardText error rval="
+                            + rval);
+                }
+            }
+        }
 
         // Update related users
         List<UserInfo> related = getRelatedProfiles(userId);

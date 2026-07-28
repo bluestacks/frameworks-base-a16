@@ -315,6 +315,9 @@ import com.android.server.webkit.WebViewUpdateService;
 import com.android.server.wm.ActivityTaskManagerService;
 import com.android.server.wm.WindowManagerGlobalLock;
 import com.android.server.wm.WindowManagerService;
+import com.bluestacks.server.BstFilterAppsService;
+import com.bluestacks.server.BstHostCallService;
+import com.bluestacks.server.BstUtilsService;
 
 import dalvik.system.VMDebug;
 import dalvik.system.VMRuntime;
@@ -508,6 +511,7 @@ public final class SystemServer implements Dumpable {
     // TODO: remove all of these references by improving dependency resolution and boot phases
     private PowerManagerService mPowerManagerService;
     private ActivityManagerService mActivityManagerService;
+    private BstUtilsService mBstUtilsService;
     private UserManagerService mUserManagerService;
     private WindowManagerGlobalLock mWindowManagerGlobalLock;
     private WebViewUpdateService mWebViewUpdateService;
@@ -1255,10 +1259,13 @@ public final class SystemServer implements Dumpable {
         startIStatsService();
         t.traceEnd();
 
-        // Start MemtrackProxyService before ActivityManager, so that early calls
-        // to Memtrack::getMemory() don't fail.
-        t.traceBegin("MemtrackProxyService");
-        startMemtrackProxyService();
+// Start MemtrackProxyService before ActivityManager, so that early calls
+// to Memtrack::getMemory() don't fail.
+t.traceBegin("MemtrackProxyService");
+        // BS-A16: memtrack HAL not available, skip to avoid native blocking
+        Log.i("A16DBG:FwBase-HALSkip", "memtrack HAL skipped (BS bringup temp_debt)");
+        // (Watchdog kills system_server after 65s in MemtrackProxyService)
+        // startMemtrackProxyService();
         t.traceEnd();
 
         // Start AccessCheckingService which provides new implementation for permission and app op.
@@ -1309,6 +1316,19 @@ public final class SystemServer implements Dumpable {
         // initialize power management features.
         t.traceBegin("InitPowerManagement");
         mActivityManagerService.initPowerManagement();
+        t.traceEnd();
+
+        t.traceBegin("StartBstFilterAppsService");
+        ServiceManager.addService(Context.BST_FILTER_APPS, new BstFilterAppsService(mSystemContext));
+        t.traceEnd();
+
+        t.traceBegin("StartBstUtilsService");
+        mBstUtilsService = new BstUtilsService(mSystemContext);
+        ServiceManager.addService(Context.BST_UTILS, mBstUtilsService);
+        t.traceEnd();
+
+        t.traceBegin("StartBstHostCallService");
+        ServiceManager.addService(Context.BST_HOST_CALL, new BstHostCallService(mSystemContext));
         t.traceEnd();
 
         // Bring up recovery system in case a rescue party needs a reboot
@@ -1664,6 +1684,7 @@ public final class SystemServer implements Dumpable {
             }
 
             t.traceBegin("StartHintManager");
+            // A16DBG:P2:cont22 — R248 temp_debt lifted: power AIDL example present; restore HintManager (performance_hint)
             mSystemServiceManager.startService(HintManagerService.class);
             t.traceEnd();
 
@@ -1731,6 +1752,7 @@ public final class SystemServer implements Dumpable {
 
             t.traceBegin("SetWindowManagerService");
             mActivityManagerService.setWindowManager(wm);
+            mBstUtilsService.setWindowManager(wm);
             t.traceEnd();
 
             t.traceBegin("WindowManagerServiceOnInitReady");
@@ -2779,10 +2801,12 @@ public final class SystemServer implements Dumpable {
 
             // Start this service after all biometric sensor services are started.
             t.traceBegin("StartBiometricService");
-            mSystemServiceManager.startService(BiometricService.class);
+            // R248 / Henry 7X-1: no gatekeeper HAL on BS
+            // mSystemServiceManager.startService(BiometricService.class);
             t.traceEnd();
 
             t.traceBegin("StartAuthService");
+            // R261 / Henry: keep AuthService (publishes "auth" for Settings)
             mSystemServiceManager.startService(AuthService.class);
             t.traceEnd();
 
@@ -2799,6 +2823,7 @@ public final class SystemServer implements Dumpable {
                 }
 
                 t.traceBegin("StartAuthenticationPolicyService");
+                // R261 / Henry: restore AuthenticationPolicyService
                 mSystemServiceManager.startService(AuthenticationPolicyService.class);
                 t.traceEnd();
             }

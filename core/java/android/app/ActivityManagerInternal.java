@@ -1430,4 +1430,7 @@ public abstract class ActivityManagerInternal {
      * @hide
      */
     public abstract void addCreatorToken(Intent intent, String creatorPackage);
+
+    /** @hide BlueStacks: map isolated uid for bstfilter. */
+    public abstract int mapIsolatedUid(int isolatedUid);
 }

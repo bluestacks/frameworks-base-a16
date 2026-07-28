@@ -22,17 +22,21 @@ import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledSince;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.SharedPreferences;
+import android.os.Binder;
 import android.os.Build;
 import android.os.FileUtils;
 import android.os.Looper;
+import android.os.SystemProperties;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.StructStat;
 import android.system.StructTimespec;
+import android.util.BstUtils;
 import android.util.Log;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.ExponentiallyBucketedHistogram;
+import com.android.internal.util.MemInfoReader;
 import com.android.internal.util.XmlUtils;
 
 import dalvik.system.BlockGuard;
@@ -55,6 +59,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.CountDownLatch;
+
+import com.bluestacks.os.BstFilterAppsManager;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
@@ -91,6 +97,12 @@ final class SharedPreferencesImpl implements SharedPreferences {
     private final Object mWritingToDiskLock = new Object();
 
     @GuardedBy("mLock")
+    private String packageName = null;
+
+    @GuardedBy("mLock")
+    private boolean mBstDefaultSet = false;
+
+    @GuardedBy("mLock")
     private Map<String, Object> mMap;
     @GuardedBy("mLock")
     private Throwable mThrowable;
@@ -123,6 +135,8 @@ final class SharedPreferencesImpl implements SharedPreferences {
     @GuardedBy("mWritingToDiskLock")
     private final ExponentiallyBucketedHistogram mSyncTimes = new ExponentiallyBucketedHistogram(16);
     private int mNumSync = 0;
+    private BstFilterAppsManager bfam = null;
+
 
     private static final ThreadPoolExecutor sLoadExecutor = new ThreadPoolExecutor(0, 1, 10L,
             TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(),
@@ -305,8 +319,12 @@ final class SharedPreferencesImpl implements SharedPreferences {
     @Override
     @Nullable
     public String getString(String key, @Nullable String defValue) {
+        bstEnsurePackageNameLocked();
         synchronized (mLock) {
             awaitLoadedLocked();
+            if (packageName != null) {
+                setBstGameDefaultSetting(packageName);
+            }
             String v = (String)mMap.get(key);
             return v != null ? v : defValue;
         }
@@ -324,32 +342,197 @@ final class SharedPreferencesImpl implements SharedPreferences {
 
     @Override
     public int getInt(String key, int defValue) {
+        bstEnsurePackageNameLocked();
         synchronized (mLock) {
             awaitLoadedLocked();
+            if (packageName != null) {
+                setBstGameDefaultSetting(packageName);
+            }
             Integer v = (Integer)mMap.get(key);
+            int egameRet = bstPatchForMartialEgameGetInt(key, v);
+            if (egameRet > 0) {
+                return egameRet;
+            }
+            int dhsRet = bstPatchForDungeonHunterGetInt(key, v);
+            if (dhsRet > 0) {
+                return dhsRet;
+            }
             return v != null ? v : defValue;
         }
     }
+
+    // A16DBG:P2:FW-CORE-APP-12 game default SharedPreferences (a13 ROB-8737/11560/11613)
+    private void setBstGameDefaultSetting(String pkg) {
+        String spFilename = "";
+        String spKeyValueSequences = "";
+        int len = 0;
+        String oneSetting = "";
+
+        if (mBstDefaultSet || !"1".equals(SystemProperties.get("sys.boot_completed"))) {
+            return;
+        }
+
+        if (bfam == null) {
+            bfam = BstFilterAppsManager.getInstance();
+        }
+
+        String gameSettingString = bfam.getGameDefaultSetting(pkg);
+        if (gameSettingString.length() > 1) {
+            try {
+                spFilename = gameSettingString.substring(
+                        gameSettingString.indexOf('=') + 1, gameSettingString.indexOf(','));
+                spKeyValueSequences = gameSettingString.substring(
+                        gameSettingString.indexOf(('='), spFilename.length()) + 1);
+            } catch (Exception e) {
+                Log.e(TAG, "A16DBG:P2:FW-CORE-APP-12 game setting parse failed");
+            }
+        }
+
+        int scoreAbove = bfam.getPScoreAbove(pkg);
+        if (!mFile.getName().equals(spFilename)
+                || SystemProperties.getInt("bst.pscore", 180) <= scoreAbove) {
+            mBstDefaultSet = true;
+            return;
+        }
+
+        while (len < spKeyValueSequences.length()) {
+            oneSetting = spKeyValueSequences.substring(spKeyValueSequences.indexOf('<', len));
+            oneSetting = oneSetting.substring(1, oneSetting.indexOf('>'));
+            len += oneSetting.length() + 2;
+            String type = oneSetting.substring(0, oneSetting.indexOf(':'));
+            String entry_value = oneSetting.substring(oneSetting.indexOf(':') + 1);
+            String entry = entry_value.substring(0, entry_value.indexOf(':'));
+            String value = entry_value.substring(entry_value.indexOf(':') + 1);
+
+            switch (type) {
+                case "int":
+                    Integer iv = (Integer) mMap.get(entry);
+                    if (iv == null) {
+                        Editor editor = edit();
+                        int data = Integer.parseInt(value);
+                        if (entry.equals("HighFPS") && pkg.equals("com.dts.freefireth")) {
+                            MemInfoReader minfo = new MemInfoReader();
+                            minfo.readMemInfo();
+                            long totalMemMb = minfo.getTotalSize() / (1024 * 1024);
+                            if (totalMemMb <= 1433) {
+                                continue;
+                            }
+                        }
+                        editor.putInt(entry, data);
+                        editor.commit();
+                    }
+                    break;
+                case "string":
+                    String sv = (String) mMap.get(entry);
+                    if (sv == null) {
+                        Editor editor = edit();
+                        editor.putString(entry, value);
+                        editor.apply();
+                    }
+                    break;
+                case "bool":
+                    Boolean bv = (Boolean) mMap.get(entry);
+                    if (bv == null) {
+                        Editor editor = edit();
+                        editor.putBoolean(entry, Boolean.parseBoolean(value));
+                        editor.apply();
+                    }
+                    break;
+                case "float":
+                    Float fv = (Float) mMap.get(entry);
+                    if (fv == null) {
+                        Editor editor = edit();
+                        editor.putFloat(entry, Float.parseFloat(value));
+                        editor.apply();
+                    }
+                    break;
+                case "long":
+                    Long lv = (Long) mMap.get(entry);
+                    if (lv == null) {
+                        Editor editor = edit();
+                        editor.putLong(entry, Long.parseLong(value));
+                        editor.apply();
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+        mBstDefaultSet = true;
+    }
+
+    private int bstPatchForMartialEgameGetInt(String key, Integer v) {
+        if ((v == null) && mFile.getName().equals("com.martial.egame.gp.v2.playerprefs.xml")) {
+            if (key.endsWith("PERFORMANCE_MODE") || key.endsWith("OPEN_HIGH_FRAME")) {
+                return 1;
+            } else if (key.equals("fenbianlv")) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    private boolean bstPatchForMartialEgameContains(String key) {
+        if (!mMap.containsKey(key)
+                && mFile.getName().equals("com.martial.egame.gp.v2.playerprefs.xml")) {
+            if (key.endsWith("PERFORMANCE_MODE") || key.endsWith("OPEN_HIGH_FRAME")) {
+                Editor editor = edit();
+                editor.putInt(key, 1);
+                editor.apply();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private int bstPatchForDungeonHunterGetInt(String key, Integer v) {
+        if ((v == null) && mFile.getName().equals("com.goatgames.dhs.gb.gp.v2.playerprefs.xml")) {
+            if (key.startsWith("HighFPS60")) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    private void bstEnsurePackageNameLocked() {
+        if (packageName == null || "zygote".equals(packageName)) {
+            mBstDefaultSet = false;
+            packageName = BstUtils.getAppNameFromPid(Binder.getCallingPid());
+        }
+    }
+
     @Override
     public long getLong(String key, long defValue) {
+        bstEnsurePackageNameLocked();
         synchronized (mLock) {
             awaitLoadedLocked();
+            if (packageName != null) {
+                setBstGameDefaultSetting(packageName);
+            }
             Long v = (Long)mMap.get(key);
             return v != null ? v : defValue;
         }
     }
     @Override
     public float getFloat(String key, float defValue) {
+        bstEnsurePackageNameLocked();
         synchronized (mLock) {
             awaitLoadedLocked();
+            if (packageName != null) {
+                setBstGameDefaultSetting(packageName);
+            }
             Float v = (Float)mMap.get(key);
             return v != null ? v : defValue;
         }
     }
     @Override
     public boolean getBoolean(String key, boolean defValue) {
+        bstEnsurePackageNameLocked();
         synchronized (mLock) {
             awaitLoadedLocked();
+            if (packageName != null) {
+                setBstGameDefaultSetting(packageName);
+            }
             Boolean v = (Boolean)mMap.get(key);
             return v != null ? v : defValue;
         }
@@ -359,6 +542,9 @@ final class SharedPreferencesImpl implements SharedPreferences {
     public boolean contains(String key) {
         synchronized (mLock) {
             awaitLoadedLocked();
+            if (bstPatchForMartialEgameContains(key)) {
+                return true;
+            }
             return mMap.containsKey(key);
         }
     }

@@ -192,6 +192,8 @@ import com.android.server.inputmethod.InputMethodSubtypeSwitchingController.ImeS
 import com.android.server.pm.UserManagerInternal;
 import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.utils.PriorityDump;
+import com.bluestacks.os.BstFilterAppsManager;
+import com.bluestacks.os.BstHostCallManager;
 import com.android.server.wm.WindowManagerInternal;
 
 import java.io.FileDescriptor;
@@ -281,6 +283,12 @@ public final class InputMethodManagerService implements IInputMethodManagerImpl.
     private static final String TAG_TRY_SUPPRESSING_IME_SWITCHER = "TrySuppressingImeSwitcher";
     private static final String HANDLER_THREAD_NAME = "android.imms";
     private static final String PACKAGE_MONITOR_THREAD_NAME = "android.imms2";
+
+    // A16DBG:P2:FW-SERVICES-6 BST host IME-change notify (a13; lazy-init BstHostCallManager)
+    private BstHostCallManager mBstHostCallManagerService;
+    // A16DBG:P2:FW-SERVICES-6b BST text-edit-mode (a13; lazy-init)
+    private static boolean bstWinKeyboardInputEnabled = true;
+    private BstFilterAppsManager mBstFilterAppsManager;
 
     /**
      * When set, {@link #startInputUncheckedLocked} will return
@@ -2944,6 +2952,14 @@ public final class InputMethodManagerService implements IInputMethodManagerImpl.
                 intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
                 intent.putExtra("input_method_id", id);
                 mContext.sendBroadcastAsUser(intent, UserHandle.CURRENT);
+                // A16DBG:P2:FW-SERVICES-6 BST notify host of active IME change (a13)
+                if (mBstHostCallManagerService == null) {
+                    mBstHostCallManagerService = (BstHostCallManager)
+                            mContext.getSystemService(Context.BST_HOST_CALL);
+                }
+                if (mBstHostCallManagerService != null) {
+                    mBstHostCallManagerService.onImeChange(id);
+                }
             }
             bindingController.unbindCurrentMethod();
             unbindCurrentClientLocked(UnbindReason.SWITCH_IME, userId);
@@ -3251,9 +3267,43 @@ public final class InputMethodManagerService implements IInputMethodManagerImpl.
     }
 
     @GuardedBy("ImfLock.class")
+
+    // A16DBG:P2:FW-SERVICES-6b BST text-edit-mode host sync for keyboard mapping (a13; mCurAttribute
+    // password-detect block omitted — field absent in a16; core isIMEDisabled gate + onTextEditModeChange kept)
+    private void bstSendSetInputMapperStatusAsync(boolean ime_enabled) {
+        String topActivityName = android.os.SystemProperties.get("bst.config.top_activity_name", null);
+        if (topActivityName != null) {
+            String[] parts = topActivityName.split("/");
+            String packageName = parts[0];
+            String activityName = parts.length > 1 ? parts[1] : null;
+            if (mBstFilterAppsManager == null) {
+                mBstFilterAppsManager = (BstFilterAppsManager)
+                        mContext.getSystemService(Context.BST_FILTER_APPS);
+            }
+            if (mBstFilterAppsManager != null
+                    && mBstFilterAppsManager.isIMEDisabled(packageName, activityName)) {
+                ime_enabled = false;
+            }
+        }
+        if (ime_enabled != bstWinKeyboardInputEnabled) {
+            bstWinKeyboardInputEnabled = ime_enabled;
+        } else {
+            return;
+        }
+        if (mBstHostCallManagerService == null) {
+            mBstHostCallManagerService = (BstHostCallManager)
+                    mContext.getSystemService(Context.BST_HOST_CALL);
+        }
+        if (mBstHostCallManagerService != null) {
+            mBstHostCallManagerService.onTextEditModeChange(bstWinKeyboardInputEnabled);
+        }
+    }
+
     private boolean showCurrentInputLocked(IBinder windowToken,
             @NonNull ImeTracker.Token statsToken, @SoftInputShowHideReason int reason,
             @UserIdInt int userId) {
+        // A16DBG:P2:FW-SERVICES-6b BST enable text-edit-mode on show (a13)
+        bstSendSetInputMapperStatusAsync(true);
         final var userData = getUserData(userId);
         final var visibilityStateComputer = userData.mVisibilityStateComputer;
         if (!visibilityStateComputer.isAllowedByAccessibilityAndDisplayPolicy()) {
@@ -3380,6 +3430,8 @@ public final class InputMethodManagerService implements IInputMethodManagerImpl.
     private boolean hideCurrentInputLocked(IBinder windowToken,
             @NonNull ImeTracker.Token statsToken, @SoftInputShowHideReason int reason,
             @UserIdInt int userId) {
+        // A16DBG:P2:FW-SERVICES-6b BST disable text-edit-mode on hide (a13)
+        bstSendSetInputMapperStatusAsync(false);
         final var userData = getUserData(userId);
         final var bindingController = userData.mBindingController;
         final var visibilityStateComputer = userData.mVisibilityStateComputer;

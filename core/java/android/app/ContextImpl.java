@@ -652,7 +652,11 @@ class ContextImpl extends Context {
                                     + "if UserManager is not available. "
                                     + "(e.g. from inside an isolated process)");
                         }
-                        if (!um.isUserUnlockingOrUnlocked(UserHandle.myUserId())) {
+                        // A16DBG:P2:FW-CORE-APP-3 a13: allow bluestacks/gms/location pre-unlock cred storage
+                        if (!um.isUserUnlockingOrUnlocked(UserHandle.myUserId())
+                                && !getPackageName().startsWith("com.bluestacks.")
+                                && !getPackageName().equals("com.location.provider")
+                                && !getPackageName().equals("com.google.android.gms")) {
                             throw new IllegalStateException("SharedPreferences in "
                                     + "credential encrypted storage are not available until after "
                                     + "user (id " + UserHandle.myUserId() + ") is unlocked");
@@ -1206,11 +1210,17 @@ class ContextImpl extends Context {
     public void startActivityAsUser(Intent intent, Bundle options, UserHandle user) {
         try {
             intent.collectExtraIntentKeys();
-            ActivityTaskManager.getService().startActivityAsUser(
+            mMainThread.getInstrumentation().bstReferrerHack(getOuterContext(), intent);
+            int res = ActivityTaskManager.getService().startActivityAsUser(
                     mMainThread.getApplicationThread(), getOpPackageName(), getAttributionTag(),
                     intent, intent.resolveTypeIfNeeded(getContentResolver()),
                     null, null, 0, Intent.FLAG_ACTIVITY_NEW_TASK, null,
                     applyLaunchDisplayIfNeeded(options), user.getIdentifier());
+            if (res == ActivityManager.START_INTENT_NOT_RESOLVED
+                    || res == ActivityManager.START_CLASS_NOT_FOUND) {
+                res = mMainThread.getInstrumentation().bstHandleProprietryIntents(getOuterContext(), res, intent);
+            }
+            mMainThread.getInstrumentation().checkStartActivityResult(res, intent);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

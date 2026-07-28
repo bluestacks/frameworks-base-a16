@@ -35,13 +35,20 @@ import android.hardware.input.InputManager;
 import android.hardware.input.InputManagerGlobal;
 import android.hardware.lights.LightsManager;
 import android.icu.util.ULocale;
+import android.os.Binder;
 import android.os.Build;
+import android.os.Process;
+import android.os.ServiceManager;
 import android.os.NullVibrator;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.Vibrator;
 import android.os.VibratorManager;
 import android.text.TextUtils;
+import android.util.BstUtils;
+import android.util.Slog;
+
+import com.bluestacks.os.IBstFilterAppsService;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -67,6 +74,7 @@ import java.util.List;
  * </p>
  */
 public final class InputDevice implements Parcelable {
+    private static final String TAG = "InputDevice";
     private final int mId;
     private final int mGeneration;
     private final int mControllerNumber;
@@ -1014,6 +1022,45 @@ public final class InputDevice implements Parcelable {
      * @return The input device name.
      */
     public String getName() {
+
+        // A16DBG:P2:FW-CORE-APP-4 hide BST/VirtualBox input device names from apps (a13)
+        int pid = Binder.getCallingPid();
+        String callingApp = BstUtils.getAppNameFromPid(pid);
+        String modifiedDeviceName = "Synaptics";
+        boolean exposeInputDevices = false;
+        IBstFilterAppsService mBstFilter = IBstFilterAppsService.Stub.asInterface(
+                ServiceManager.getService(Context.BST_FILTER_APPS));
+        try {
+            if (callingApp != null) {
+                exposeInputDevices = mBstFilter.areInputDevicesExposed(callingApp);
+            }
+        } catch (Exception ex) {
+            Slog.d(TAG, ex.getMessage());
+        }
+        if ((mName.toLowerCase().startsWith("bluestacks")
+                || mName.toLowerCase().startsWith("virtualbox")
+                || mName.toLowerCase().contains("keyboard")
+                || mName.toLowerCase().contains("mouse"))
+                && (Binder.getCallingUid() != Process.SYSTEM_UID)
+                && (Binder.getCallingUid() >= 10000)
+                && callingApp != null
+                && !callingApp.startsWith("com.bluestacks")
+                && !callingApp.startsWith("com.uncube")) {
+            if (exposeInputDevices) {
+                if (mName.startsWith("BlueStacks") || mName.startsWith("VirtualBox")) {
+                    if (mName.toLowerCase().contains("keyboard")) {
+                        return modifiedDeviceName + " keyboard";
+                    } else if (mName.toLowerCase().contains("mouse")) {
+                        return modifiedDeviceName + " mouse";
+                    } else {
+                        return modifiedDeviceName + "-" + mId;
+                    }
+                }
+            } else {
+                return modifiedDeviceName + "-" + mId;
+            }
+        }
+
         return mName;
     }
 
@@ -1658,7 +1705,7 @@ public final class InputDevice implements Parcelable {
     @Override
     public String toString() {
         StringBuilder description = new StringBuilder();
-        description.append("Input Device ").append(mId).append(": ").append(mName).append("\n");
+        description.append("Input Device ").append(mId).append(": ").append(getName()).append("\n");
         description.append("  Descriptor: ").append(mDescriptor).append("\n");
         description.append("  Generation: ").append(mGeneration).append("\n");
         description.append("  Location: ").append(mIsExternal ? "external" : "built-in").append(

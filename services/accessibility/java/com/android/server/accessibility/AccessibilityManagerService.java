@@ -120,6 +120,7 @@ import android.hardware.input.KeyGestureEvent;
 import android.media.AudioManagerInternal;
 import android.net.Uri;
 import android.os.Binder;
+import android.util.BstUtils;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -1540,8 +1541,11 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             // performs the current profile parent resolution.
             resolvedUserId = mSecurityPolicy
                     .resolveCallingUserIdEnforcingPermissionsLocked(userId);
-            serviceInfos = new ArrayList<>(
-                    getUserStateLocked(resolvedUserId).mInstalledServices);
+            // A16DBG:P2:FW-SERVICES-5 hide BST a11y services from 3rd-party (a13)
+            List<AccessibilityServiceInfo> bstInstalled =
+                    getUserStateLocked(resolvedUserId).mInstalledServices;
+            bstInstalled = BstUtils.filterHiddenServices(bstInstalled, Binder.getCallingUid());
+            serviceInfos = new ArrayList<>(bstInstalled);
         }
 
         if (Binder.getCallingPid() == OWN_PROCESS_ID) {
@@ -1591,7 +1595,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
 
             final List<AccessibilityServiceConnection> services = userState.mBoundServices;
             final int serviceCount = services.size();
-            final List<AccessibilityServiceInfo> result = new ArrayList<>(serviceCount);
+            List<AccessibilityServiceInfo> result = new ArrayList<>(serviceCount);
             for (int i = 0; i < serviceCount; ++i) {
                 final AccessibilityServiceConnection service = services.get(i);
                 if ((service.mFeedbackType & feedbackType) != 0
@@ -1599,6 +1603,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     result.add(service.getServiceInfo());
                 }
             }
+            // A16DBG:P2:FW-SERVICES-5 hide BST a11y services from 3rd-party (a13)
+            result = BstUtils.filterHiddenServices(result, Binder.getCallingUid());
             return result;
         }
     }
