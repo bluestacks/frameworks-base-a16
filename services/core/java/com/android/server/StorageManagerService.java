@@ -1024,7 +1024,7 @@ class StorageManagerService extends IStorageManager.Stub
     private void configureTranscoding() {
         // See MediaProvider TranscodeHelper#getBooleanProperty for more information
         boolean transcodeEnabled = false;
-        boolean defaultValue = true; // BS-A16: skip isHevcDecoderSupported, mediaserver getCodecList hangs on 64-only, blocking SMS handler
+        boolean defaultValue = isHevcDecoderSupported() ? true : false;
 
         if (SystemProperties.getBoolean("persist.sys.fuse.transcode_user_control", false)) {
             transcodeEnabled = SystemProperties.getBoolean("persist.sys.fuse.transcode_enabled",
