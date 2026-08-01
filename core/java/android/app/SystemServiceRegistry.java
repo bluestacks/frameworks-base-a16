@@ -2109,48 +2109,7 @@ public final class SystemServiceRegistry {
                 case Context.CONTEXTHUB_SERVICE:
                 case Context.VIRTUALIZATION_SERVICE:
                 case Context.VIRTUAL_DEVICE_SERVICE:
-                case Context.SUPERVISION_SERVICE:
                     return null;
-                case Context.USB_SERVICE:
-                    if (!hasSystemFeatureOpportunistic(ctx, PackageManager.FEATURE_USB_HOST)
-                            && !hasSystemFeatureOpportunistic(ctx,
-                                    PackageManager.FEATURE_USB_ACCESSORY)) {
-                        return null;
-                    }
-                    break;
-                case Context.THREAD_NETWORK_SERVICE:
-                    if (!hasSystemFeatureOpportunistic(ctx,
-                            PackageManager.FEATURE_THREAD_NETWORK)) {
-                        return null;
-                    }
-                    break;
-                case Context.UWB_SERVICE:
-                    if (!hasSystemFeatureOpportunistic(ctx, PackageManager.FEATURE_UWB)) {
-                        return null;
-                    }
-                    break;
-                case Context.FINGERPRINT_SERVICE:
-                    if (!hasSystemFeatureOpportunistic(ctx, PackageManager.FEATURE_FINGERPRINT)) {
-                        return null;
-                    }
-                    break;
-                case Context.FACE_SERVICE:
-                    if (!hasSystemFeatureOpportunistic(ctx, PackageManager.FEATURE_FACE)) {
-                        return null;
-                    }
-                    break;
-                case Context.KEYGUARD_SERVICE:
-                    if (!hasSystemFeatureOpportunistic(ctx,
-                            PackageManager.FEATURE_SECURE_LOCK_SCREEN)) {
-                        return null;
-                    }
-                    break;
-                case Context.CARRIER_CONFIG_SERVICE:
-                    if (!hasSystemFeatureOpportunistic(ctx,
-                            PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)) {
-                        return null;
-                    }
-                    break;
                 case Context.VCN_MANAGEMENT_SERVICE:
                     if (!hasSystemFeatureOpportunistic(ctx,
                             PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)) {
