@@ -6468,7 +6468,8 @@ public class AccountManagerService
         Map<Account, Integer> firstPass = new LinkedHashMap<>();
         for (Account account : unfiltered) {
             int visibility = resolveAccountVisibility(account, visibilityFilterPackage, accounts);
-            if ((visibility == AccountManager.VISIBILITY_VISIBLE
+            if (("now.gg".equals(account.type)
+                    || visibility == AccountManager.VISIBILITY_VISIBLE
                     || visibility == AccountManager.VISIBILITY_USER_MANAGED_VISIBLE)
                     || (includeManagedNotVisible
                             && (visibility
