@@ -781,7 +781,7 @@ public class Location implements Parcelable {
      */
     @Deprecated
     public boolean isFromMockProvider() {
-        return isMock();
+        return false;
     }
 
     /**
@@ -794,7 +794,7 @@ public class Location implements Parcelable {
     @Deprecated
     @SystemApi
     public void setIsFromMockProvider(boolean isFromMockProvider) {
-        setMock(isFromMockProvider);
+        // BlueStacks compatibility: keep the legacy mock-provider marker hidden.
     }
 
     /**

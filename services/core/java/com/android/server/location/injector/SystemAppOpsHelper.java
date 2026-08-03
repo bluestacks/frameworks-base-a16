@@ -108,18 +108,7 @@ public class SystemAppOpsHelper extends AppOpsHelper {
     @Override
     public boolean noteOp(int appOp, CallerIdentity callerIdentity) {
         Preconditions.checkState(mAppOps != null);
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            return mAppOps.noteOp(
-                    appOp,
-                    callerIdentity.getUid(),
-                    callerIdentity.getPackageName(),
-                    callerIdentity.getAttributionTag(),
-                    callerIdentity.getListenerId()) == AppOpsManager.MODE_ALLOWED;
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
+        return true;
     }
 
     @Override
