@@ -153,7 +153,8 @@ final class ScanPackageUtils {
         // them in the case where we're not upgrading or booting for the first time.
         String primaryCpuAbiFromSettings = null;
         String secondaryCpuAbiFromSettings = null;
-        boolean needToDeriveAbi = (scanFlags & SCAN_FIRST_BOOT_OR_UPGRADE) != 0;
+        boolean needToDeriveAbi = (scanFlags & SCAN_FIRST_BOOT_OR_UPGRADE) != 0
+                || PackageManagerService.bstIsFirstBootAfterUpgrade();
         boolean isApex = (scanFlags & SCAN_AS_APEX) != 0;
 
         if (!needToDeriveAbi) {

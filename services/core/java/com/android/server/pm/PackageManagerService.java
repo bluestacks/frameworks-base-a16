@@ -379,6 +379,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     private static final File BST_FIRST_BOOT_AFTER_UPGRADE_FILE =
             new File("/data/downloads/.first_boot_after_upgrade_for_pm");
     private static boolean sBstFirstBootAfterUpgrade;
+    private static boolean sBstPlayerFirstBoot;
 
     static final int SCAN_NO_DEX = 1 << 0;
     static final int SCAN_UPDATE_SIGNATURE = 1 << 1;
@@ -2206,6 +2207,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             t.traceBegin("read user settings");
             mFirstBoot = !mSettings.readLPw(computer,
                     mInjector.getUserManagerInternal().getUsers(/* excludeDying= */ false));
+            sBstPlayerFirstBoot = mFirstBoot;
             t.traceEnd();
 
             if (mFirstBoot) {
@@ -2614,6 +2616,10 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
     public static boolean bstIsFirstBootAfterUpgrade() {
         return sBstFirstBootAfterUpgrade;
+    }
+
+    public static boolean bstIsFirstBootOrUpgrade() {
+        return sBstPlayerFirstBoot || sBstFirstBootAfterUpgrade;
     }
 
     public boolean isDeviceUpgrading() {

@@ -155,12 +155,13 @@ final class PackageAbiHelperImpl implements PackageAbiHelper {
         // current state in PackageSetting is irrelevant.
         return deriveNativeLibraryPaths(new Abis(AndroidPackageUtils.getRawPrimaryCpuAbi(pkg),
                 AndroidPackageUtils.getRawSecondaryCpuAbi(pkg)), appLib32InstallDir, pkg.getPath(),
-                pkg.getBaseApkPath(), isSystemApp, isUpdatedSystemApp);
+                pkg.getBaseApkPath(), isSystemApp, isUpdatedSystemApp, pkg.isMultiArch());
     }
 
     private static NativeLibraryPaths deriveNativeLibraryPaths(final Abis abis,
             final File appLib32InstallDir, final String codePath, final String sourceDir,
-            final boolean isSystemApp, final boolean isUpdatedSystemApp) {
+            final boolean isSystemApp, final boolean isUpdatedSystemApp,
+            final boolean isMultiArch) {
         final File codeFile = new File(codePath);
         final boolean bundledApp = isSystemApp && !isUpdatedSystemApp;
 
@@ -203,12 +204,19 @@ final class PackageAbiHelperImpl implements PackageAbiHelper {
             nativeLibraryRootRequiresIsa = false;
             nativeLibraryDir = nativeLibraryRootDir;
         } else {
-            // Cluster install
-            nativeLibraryRootDir = new File(codeFile, LIB_DIR_NAME).getAbsolutePath();
-            nativeLibraryRootRequiresIsa = true;
+            if (isBstLauncherCodePath(codePath) && isSystemApp && !isMultiArch) {
+                final String apkName = deriveCodePathName(codePath);
+                nativeLibraryRootDir = new File(appLib32InstallDir, apkName).getAbsolutePath();
+                nativeLibraryRootRequiresIsa = false;
+                nativeLibraryDir = nativeLibraryRootDir;
+            } else {
+                // Cluster install
+                nativeLibraryRootDir = new File(codeFile, LIB_DIR_NAME).getAbsolutePath();
+                nativeLibraryRootRequiresIsa = true;
 
-            nativeLibraryDir = new File(nativeLibraryRootDir,
-                    getPrimaryInstructionSet(abis)).getAbsolutePath();
+                nativeLibraryDir = new File(nativeLibraryRootDir,
+                        getPrimaryInstructionSet(abis)).getAbsolutePath();
+            }
 
             if (abis.secondary != null) {
                 secondaryNativeLibraryDir = new File(nativeLibraryRootDir,
@@ -219,6 +227,16 @@ final class PackageAbiHelperImpl implements PackageAbiHelper {
         }
         return new NativeLibraryPaths(nativeLibraryRootDir, nativeLibraryRootRequiresIsa,
                 nativeLibraryDir, secondaryNativeLibraryDir);
+    }
+
+    private static boolean isBstLauncherCodePath(String codePath) {
+        return "/data/downloads/com.uncube.launcher3".equals(codePath)
+                || "/data/downloads/com.uncube.gamevantage".equals(codePath);
+    }
+
+    private static boolean isBstLauncherPackage(String packageName) {
+        return "com.uncube.launcher3".equals(packageName)
+                || "com.uncube.gamevantage".equals(packageName);
     }
 
     @Override
@@ -357,7 +375,7 @@ final class PackageAbiHelperImpl implements PackageAbiHelper {
                 new Abis(pkgRawPrimaryCpuAbi, pkgRawSecondaryCpuAbi),
                 appLib32InstallDir, pkg.getPath(),
                 pkg.getBaseApkPath(), isSystemApp,
-                isUpdatedSystemApp);
+                isUpdatedSystemApp, pkg.isMultiArch());
 
         final boolean extractLibs = shouldExtractLibs(pkg, isSystemApp, isUpdatedSystemApp);
 
@@ -534,7 +552,7 @@ final class PackageAbiHelperImpl implements PackageAbiHelper {
         return new Pair<>(abis,
                 deriveNativeLibraryPaths(abis, appLib32InstallDir,
                         pkg.getPath(), pkg.getBaseApkPath(), isSystemApp,
-                        isUpdatedSystemApp));
+                        isUpdatedSystemApp, pkg.isMultiArch()));
     }
 
     private boolean shouldExtractLibs(AndroidPackage pkg, boolean isSystemApp,
@@ -544,7 +562,8 @@ final class PackageAbiHelperImpl implements PackageAbiHelper {
                 && pkg.isExtractNativeLibrariesRequested();
         // We shouldn't attempt to extract libs from system app when it was not updated.
         if (isSystemApp && !isUpdatedSystemApp) {
-            extractLibs = false;
+            extractLibs = PackageManagerService.bstIsFirstBootOrUpgrade()
+                    && isBstLauncherPackage(pkg.getPackageName());
         }
         return extractLibs;
     }
