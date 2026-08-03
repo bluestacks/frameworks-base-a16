@@ -1938,6 +1938,46 @@ static void BindMountStorageDirs(JNIEnv* env, jobjectArray pkg_data_info_list,
   }
 }
 
+static std::string BstPackageNameFromAppDataDir(const std::optional<std::string>& app_data_dir) {
+  if (!app_data_dir.has_value()) {
+    return {};
+  }
+  const size_t separator = app_data_dir->find_last_of('/');
+  if (separator == std::string::npos || separator + 1 >= app_data_dir->size()) {
+    return {};
+  }
+  return app_data_dir->substr(separator + 1);
+}
+
+static bool ReadBstSmallFile(const char* path, std::string* contents) {
+  static constexpr size_t kMaxBstSmallFileSize = 1024 * 1024;
+  if (!ReadFileToString(path, contents)) {
+    return false;
+  }
+  if (contents->size() > kMaxBstSmallFileSize) {
+    ALOGE("BlueStacks config file is too large: %s", path);
+    contents->clear();
+    return false;
+  }
+  return true;
+}
+
+static bool BstPackageInList(const char* path, const std::string& package_name) {
+  std::string contents;
+  if (package_name.empty() || !ReadBstSmallFile(path, &contents)) {
+    return false;
+  }
+  std::replace(contents.begin(), contents.end(), '\n', ';');
+  std::stringstream stream(contents);
+  std::string entry;
+  while (std::getline(stream, entry, ';')) {
+    if (entry == package_name) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Utility routine to specialize a zygote child process.
 static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, jint runtime_flags,
                              jobjectArray rlimits, jlong permitted_capabilities,
@@ -1956,6 +1996,7 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, 
     auto nice_name = extract_fn(managed_nice_name);
     auto instruction_set = extract_fn(managed_instruction_set);
     auto app_data_dir = extract_fn(managed_app_data_dir);
+    const std::string bst_package_name = BstPackageNameFromAppDataDir(app_data_dir);
 
     // Permit bounding capabilities
     permitted_capabilities |= bounding_capabilities;
@@ -2041,6 +2082,13 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, 
         android::PreInitializeNativeBridge(app_data_dir.has_value() ? app_data_dir.value().c_str()
                                                                     : nullptr,
                                            instruction_set.value().c_str());
+
+        if (uid >= AID_APP_START
+                && BstPackageInList("/data/downloads/.tmp/.bstXcpuApps", bst_package_name)
+                && TEMP_FAILURE_RETRY(mount("/etc/xcpuinfo", "/proc/cpuinfo", nullptr, MS_BIND,
+                                            nullptr)) == -1) {
+            ALOGW("Failed to bind-mount /etc/xcpuinfo as /proc/cpuinfo: %s", strerror(errno));
+        }
     }
 
     if (is_system_server && !(runtime_flags & RuntimeFlags::PROFILE_SYSTEM_SERVER)) {
