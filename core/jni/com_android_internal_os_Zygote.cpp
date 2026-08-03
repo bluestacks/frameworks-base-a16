@@ -554,6 +554,34 @@ static void SetGids(JNIEnv* env, jintArray managed_gids, jboolean is_child_zygot
   }
 }
 
+static bool SetBstGids(JNIEnv* env, jintArray managed_gids, const char* process_name,
+                       fail_fn_t fail_fn) {
+  if (process_name == nullptr
+      || (strncmp(process_name, "com.bluestacks", strlen("com.bluestacks")) != 0
+          && strncmp(process_name, "com.uncube", strlen("com.uncube")) != 0)) {
+    return false;
+  }
+
+  std::vector<gid_t> gids;
+  if (managed_gids != nullptr) {
+    ScopedIntArrayRO managed(env, managed_gids);
+    if (managed.get() == nullptr) {
+      fail_fn(CREATE_ERROR("Getting gids int array failed"));
+    }
+    gids.reserve(managed.size() + 1);
+    for (size_t i = 0; i < managed.size(); ++i) {
+      gids.push_back(static_cast<gid_t>(managed[i]));
+    }
+  }
+  if (std::find(gids.begin(), gids.end(), AID_READPROC) == gids.end()) {
+    gids.push_back(AID_READPROC);
+  }
+  if (setgroups(gids.size(), gids.data()) == -1) {
+    fail_fn(CREATE_ERROR("setgroups with AID_READPROC failed: %s", strerror(errno)));
+  }
+  return true;
+}
+
 static void ensureInAppMountNamespace(fail_fn_t fail_fn) {
   if (gInAppMountNamespace) {
     // In app mount namespace already
@@ -2001,7 +2029,10 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, 
         }
     }
 
-    SetGids(env, gids, is_child_zygote, fail_fn);
+    const char* bst_process_name = nice_name.has_value() ? nice_name->c_str() : nullptr;
+    if (!SetBstGids(env, gids, bst_process_name, fail_fn)) {
+        SetGids(env, gids, is_child_zygote, fail_fn);
+    }
     SetRLimits(env, rlimits, fail_fn);
 
     if (need_pre_initialize_native_bridge) {
