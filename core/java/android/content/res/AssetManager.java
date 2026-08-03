@@ -139,6 +139,9 @@ public final class AssetManager implements AutoCloseable {
     private AtomicInteger mNumRefs = new AtomicInteger(1);
     @GuardedBy("this") private HashMap<Long, RuntimeException> mRefStacks;
 
+    // Kept disabled until the host-driven status-bar policy is re-enabled.
+    private static final boolean BST_HIDE_STATUS_BAR = false;
+
     private ResourcesLoader[] mLoaders;
 
     /**
@@ -654,6 +657,9 @@ public final class AssetManager implements AutoCloseable {
     boolean getResourceValue(@AnyRes int resId, int densityDpi, @NonNull TypedValue outValue,
             boolean resolveRefs) {
         Objects.requireNonNull(outValue, "outValue");
+        if (BST_HIDE_STATUS_BAR && resId == com.android.internal.R.dimen.status_bar_height) {
+            resId = com.android.internal.R.dimen.bst_system_bar_height;
+        }
         synchronized (this) {
             ensureValidLocked();
             final int cookie = nativeGetResourceValue(

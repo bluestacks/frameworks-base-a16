@@ -1365,6 +1365,7 @@
   <java-symbol type="array" name="config_availableEMValueOptions" />
 
   <java-symbol type="drawable" name="default_wallpaper" />
+  <java-symbol type="drawable" name="default_wallpaper_msi" />
   <java-symbol type="drawable" name="default_lock_wallpaper" />
   <java-symbol type="drawable" name="indicator_input_error" />
   <java-symbol type="drawable" name="ic_file_copy" />
@@ -1906,6 +1907,7 @@
   <java-symbol type="dimen" name="navigation_bar_width_car_mode" />
   <java-symbol type="dimen" name="taskbar_frame_height" />
   <java-symbol type="dimen" name="status_bar_height" />
+  <java-symbol type="dimen" name="bst_system_bar_height" />
   <java-symbol type="dimen" name="display_cutout_touchable_region_size" />
   <java-symbol type="dimen" name="system_gestures_distance_threshold" />
   <java-symbol type="dimen" name="system_gestures_start_threshold" />

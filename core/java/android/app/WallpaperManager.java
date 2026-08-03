@@ -135,7 +135,8 @@ import java.util.concurrent.TimeUnit;
 public class WallpaperManager {
 
     private static String TAG = "WallpaperManager";
-    private static final boolean DEBUG = false;
+    private static final boolean DEBUG =
+            SystemProperties.getBoolean("bst.debug.wallpaper", false);
 
     /**
      * Trying to read the wallpaper file or bitmap in T will return
@@ -3412,8 +3413,13 @@ public class WallpaperManager {
         defaultResId = which == FLAG_LOCK ? R.drawable.default_lock_wallpaper :  ....
         */
         whichProp = PROP_WALLPAPER;
-        defaultResId = R.drawable.default_wallpaper;
+        defaultResId = "msi5".equals(SystemProperties.get("bst.oem", ""))
+                ? R.drawable.default_wallpaper_msi
+                : R.drawable.default_wallpaper;
         final String path = SystemProperties.get(whichProp);
+        if (DEBUG) {
+            Log.d(TAG, "Default wallpaper path=" + path + " resource=" + defaultResId);
+        }
         final InputStream wallpaperInputStream = getWallpaperInputStream(path);
         if (wallpaperInputStream != null) {
             return wallpaperInputStream;
@@ -3427,6 +3433,9 @@ public class WallpaperManager {
             return context.getResources().openRawResource(defaultResId);
         } catch (NotFoundException e) {
             // no default defined for this device; this is not a failure
+            if (DEBUG) {
+                Log.d(TAG, "Default wallpaper resource not found", e);
+            }
         }
         return null;
     }
@@ -3454,9 +3463,15 @@ public class WallpaperManager {
             final File file = new File(path);
             if (file.exists()) {
                 try {
+                    if (DEBUG) {
+                        Log.d(TAG, "Opening default wallpaper " + path);
+                    }
                     return new FileInputStream(file);
                 } catch (IOException e) {
                     // Ignored, fall back to platform default
+                    if (DEBUG) {
+                        Log.d(TAG, "Unable to open default wallpaper " + path, e);
+                    }
                 }
             }
         }
