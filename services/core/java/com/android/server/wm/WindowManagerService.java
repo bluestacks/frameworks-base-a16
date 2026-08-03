@@ -4180,6 +4180,48 @@ public class WindowManagerService extends IWindowManager.Stub
         mPolicy.setBstProposedRotation(proposedRotation);
     }
 
+    /** Updates the default display density for the package being launched or refreshed. */
+    public void changeDisplayDensity(String packageName, String activityName) {
+        final String topPackageName = packageName != null
+                ? packageName
+                : SystemProperties.get("bst.config.top_package_name", null);
+        if (topPackageName == null || topPackageName.isEmpty() || mBstFilterApps == null) {
+            return;
+        }
+
+        final String customDpi = mBstFilterApps.getCustomDpi(topPackageName);
+        final int density;
+        if ("160".equals(customDpi) || "240".equals(customDpi)
+                || "320".equals(customDpi) || "400".equals(customDpi)
+                || "480".equals(customDpi)) {
+            density = Integer.parseInt(customDpi);
+        } else {
+            density = 0;
+        }
+
+        try {
+            synchronized (mGlobalLock) {
+                final DisplayContent displayContent =
+                        mRoot.getDisplayContent(Display.DEFAULT_DISPLAY);
+                if (displayContent == null) {
+                    return;
+                }
+                final int initialDensity = displayContent.getInitialDisplayDensity();
+                final int currentDensity = displayContent.mBaseDisplayDensity;
+                if (density > 0 && currentDensity != density) {
+                    setForcedDensityLockedInternal(
+                            Display.DEFAULT_DISPLAY, density, mCurrentUserId);
+                } else if (density == 0 && initialDensity != currentDensity) {
+                    displayContent.setForcedDensity(initialDensity, mCurrentUserId);
+                    displayContent.clearForcedDensityRatio();
+                }
+            }
+        } catch (RuntimeException e) {
+            Slog.w(TAG, "Unable to update display density to " + density
+                    + " for " + topPackageName, e);
+        }
+    }
+
     private void performEnableScreen() {
         synchronized (mGlobalLock) {
             ProtoLog.i(WM_DEBUG_BOOT, "performEnableScreen: mDisplayEnabled=%b"

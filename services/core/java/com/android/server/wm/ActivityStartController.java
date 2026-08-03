@@ -131,6 +131,11 @@ public class ActivityStartController {
      *         considered invalid and no longer modified or used.
      */
     ActivityStarter obtainStarter(Intent intent, String reason) {
+        if (intent != null && intent.getComponent() != null) {
+            mService.mWindowManager.changeDisplayDensity(
+                    intent.getComponent().getPackageName(),
+                    intent.getComponent().getClassName());
+        }
         return mFactory.obtain().setIntent(intent).setReason(reason);
     }
 

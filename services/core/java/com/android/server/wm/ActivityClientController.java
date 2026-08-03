@@ -215,6 +215,7 @@ class ActivityClientController extends IActivityClientController.Stub {
         final long origId = Binder.clearCallingIdentity();
         synchronized (mGlobalLock) {
             ActivityRecord.activityRefreshedLocked(token);
+            mService.mWindowManager.changeDisplayDensity(null, null);
         }
         Binder.restoreCallingIdentity(origId);
     }
