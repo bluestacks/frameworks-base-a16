@@ -35,6 +35,7 @@
 #include <arpa/inet.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <fnmatch.h>
 #include <grp.h>
 #include <inttypes.h>
 #include <malloc.h>
@@ -1992,7 +1993,8 @@ static std::optional<std::string> BstMemorySizeForPackage(const std::string& pac
     if (separator == std::string::npos || separator + 1 >= line.size()) {
       continue;
     }
-    if (line.substr(0, separator) == package_name) {
+    const std::string pattern = line.substr(0, separator);
+    if (pattern == package_name || fnmatch(pattern.c_str(), package_name.c_str(), 0) == 0) {
       return line.substr(separator + 1);
     }
   }
