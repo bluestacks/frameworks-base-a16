@@ -219,6 +219,7 @@ import android.stats.devicepolicy.DevicePolicyEnums;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.BstUtils;
 import android.util.EventLog;
 import android.util.Pair;
 import android.util.PrintWriterPrinter;
@@ -7747,6 +7748,9 @@ public final class ActiveServices {
         ArrayList<ActivityManager.RunningServiceInfo> res
                 = new ArrayList<ActivityManager.RunningServiceInfo>();
 
+        final String callingPackage = callingUid >= Process.FIRST_APPLICATION_UID
+                ? BstUtils.getAppNameFromPid(mAm.mInjector.getCallingPid()) : null;
+
         final long ident = mAm.mInjector.clearCallingIdentity();
         try {
             if (canInteractAcrossUsers) {
@@ -7755,12 +7759,18 @@ public final class ActiveServices {
                     ArrayMap<ComponentName, ServiceRecord> alls = getServicesLocked(users[ui]);
                     for (int i=0; i<alls.size() && res.size() < maxNum; i++) {
                         ServiceRecord sr = alls.valueAt(i);
+                        if (shouldHideBstRunningService(sr, callingUid, callingPackage)) {
+                            continue;
+                        }
                         res.add(makeRunningServiceInfoLocked(sr));
                     }
                 }
 
                 for (int i=0; i<mRestartingServices.size() && res.size() < maxNum; i++) {
                     ServiceRecord r = mRestartingServices.get(i);
+                    if (shouldHideBstRunningService(r, callingUid, callingPackage)) {
+                        continue;
+                    }
                     ActivityManager.RunningServiceInfo info =
                             makeRunningServiceInfoLocked(r);
                     info.restarting = r.nextRestartTime;
@@ -7772,6 +7782,10 @@ public final class ActiveServices {
                 for (int i=0; i<alls.size() && res.size() < maxNum; i++) {
                     ServiceRecord sr = alls.valueAt(i);
 
+                    if (shouldHideBstRunningService(sr, callingUid, callingPackage)) {
+                        continue;
+                    }
+
                     if (allowed || (sr.app != null && sr.app.uid == callingUid)) {
                         res.add(makeRunningServiceInfoLocked(sr));
                     }
@@ -7779,6 +7793,9 @@ public final class ActiveServices {
 
                 for (int i=0; i<mRestartingServices.size() && res.size() < maxNum; i++) {
                     ServiceRecord r = mRestartingServices.get(i);
+                    if (shouldHideBstRunningService(r, callingUid, callingPackage)) {
+                        continue;
+                    }
                     if (r.userId == userId
                         && (allowed || (r.app != null && r.app.uid == callingUid))) {
                         ActivityManager.RunningServiceInfo info =
@@ -7793,6 +7810,17 @@ public final class ActiveServices {
         }
 
         return res;
+    }
+
+    private static boolean shouldHideBstRunningService(ServiceRecord service, int callingUid,
+            @Nullable String callingPackage) {
+        if (service.processName == null || !service.processName.startsWith("com.bluestacks")
+                || callingUid < Process.FIRST_APPLICATION_UID || callingPackage == null
+                || callingPackage.startsWith("com.bluestacks")) {
+            return false;
+        }
+        return "com.android.vending".equalsIgnoreCase(callingPackage)
+                || !callingPackage.startsWith("com.android");
     }
 
     public PendingIntent getRunningServiceControlPanelLocked(ComponentName name) {

@@ -314,7 +314,7 @@ final class ActivityManagerConstants extends ContentObserver {
     /**
      * Default value to {@link #SERVICE_TIMEOUT}.
      */
-    private static final long DEFAULT_SERVICE_TIMEOUT = 20 * 1000 * Build.HW_TIMEOUT_MULTIPLIER;
+    private static final long DEFAULT_SERVICE_TIMEOUT = 2 * 60 * 1000;
 
     /**
      * Default value to {@link #SERVICE_BACKGROUND_TIMEOUT}.
