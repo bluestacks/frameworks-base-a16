@@ -2113,13 +2113,14 @@ static void UpdateInstagramReelMediaProperty(const std::string& package_name) {
   if (package_name != "com.instagram.android") {
     return;
   }
+  android::base::SetProperty("bst.config.instagram_reel_media", "");
   DIR* directory = opendir("/data/data/com.instagram.android/databases");
   if (directory == nullptr) {
     return;
   }
   while (dirent* entry = readdir(directory)) {
     if (strstr(entry->d_name, "reel_media") != nullptr) {
-      android::base::SetProperty("instagram_reel_media", "1");
+      android::base::SetProperty("bst.config.instagram_reel_media", "1");
       break;
     }
   }
