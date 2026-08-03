@@ -121,6 +121,7 @@ public class NetworkManagementService extends INetworkManagementService.Stub {
 
     private static final String TAG = "NetworkManagement";
     private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
+    private static final boolean BST_CHANGES_ENABLED = true;
 
     /**
      * Binder context for this service
@@ -421,6 +422,11 @@ public class NetworkManagementService extends INetworkManagementService.Stub {
      * existing in-memory rules.
      */
     private void prepareNativeDaemon() {
+
+        if (BST_CHANGES_ENABLED) {
+            setFirewallEnabled(false);
+            return;
+        }
 
         // push any existing quota or UID rules
         synchronized (mQuotaLock) {

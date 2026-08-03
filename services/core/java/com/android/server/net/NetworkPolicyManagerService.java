@@ -1028,12 +1028,12 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         try {
             // Boost thread's priority during system server init
             Process.setThreadPriority(Process.THREAD_PRIORITY_FOREGROUND);
+            mUsageStats = LocalServices.getService(UsageStatsManagerInternal.class);
             if (!isBandwidthControlEnabled()) {
                 Slog.w(TAG, "bandwidth controls disabled, unable to enforce policy");
                 return;
             }
 
-            mUsageStats = LocalServices.getService(UsageStatsManagerInternal.class);
             mAppStandby = LocalServices.getService(AppStandbyInternal.class);
             mActivityManagerInternal = LocalServices.getService(ActivityManagerInternal.class);
 
