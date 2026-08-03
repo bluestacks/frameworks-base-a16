@@ -58,6 +58,8 @@ import android.content.ContextParams;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
 import android.net.Uri;
@@ -113,6 +115,7 @@ import android.telephony.ims.feature.MmTelFeature;
 import android.telephony.ims.stub.ImsRegistrationImplBase;
 import android.text.TextUtils;
 import android.util.Log;
+import android.util.BstUtils;
 import android.util.Pair;
 
 import com.android.internal.annotations.GuardedBy;
@@ -134,6 +137,7 @@ import com.android.internal.telephony.IccLogicalChannelRequest;
 import com.android.internal.telephony.OperatorInfo;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.RILConstants;
+import com.android.internal.telephony.TelephonyPermissions;
 import com.android.internal.telephony.flags.Flags;
 import com.android.internal.telephony.uicc.IccUtils;
 import com.android.internal.telephony.util.TelephonyUtils;
@@ -195,6 +199,10 @@ public class TelephonyManager {
     private static final boolean BST_TELEPHONY_CHANGES_ENABLED = true;
     private static final String PROPERTY_OPERATOR_ALPHA = "gsm.operator.alpha";
     private static final String PROPERTY_OPERATOR_NUMERIC = "gsm.operator.numeric";
+    private static final String PROPERTY_ICC_OPERATOR_ALPHA = "gsm.sim.operator.alpha";
+    private static final String PROPERTY_ICC_OPERATOR_ISO_COUNTRY =
+            "gsm.sim.operator.iso-country";
+    private static final String PROPERTY_ICC_OPERATOR_NUMERIC = "gsm.sim.operator.numeric";
     private static final String TAG = "TelephonyManager";
 
     /**
@@ -444,6 +452,9 @@ public class TelephonyManager {
     private SubscriptionManager mSubscriptionManager;
     private TelephonyScanManager mTelephonyScanManager;
 
+    /** @hide */
+    public static SubscriptionInfo mBstSubscriptionInfo;
+
     /** Cached service handles, cleared by resetServiceHandles() at death */
     private static final Object sCacheLock = new Object();
 
@@ -529,6 +540,9 @@ public class TelephonyManager {
         mContext = mergeAttributionAndRenouncedPermissions(context.getApplicationContext(),
             context);
         mSubscriptionManager = SubscriptionManager.from(mContext);
+        if (mBstSubscriptionInfo == null) {
+            createBstSubscriptionInfo();
+        }
     }
 
     /** @hide */
@@ -539,6 +553,36 @@ public class TelephonyManager {
     }
 
     private static TelephonyManager sInstance = new TelephonyManager();
+
+    private void createBstSubscriptionInfo() {
+        String iccId;
+        try {
+            iccId = BstUtils.getBstSimSerialNumber();
+        } catch (RuntimeException e) {
+            iccId = null;
+        }
+
+        final String operator = getNetworkOperator();
+        final String mcc = operator.substring(0, 3);
+        final String mnc = operator.substring(3);
+        final Bitmap icon = BitmapFactory.decodeResource(mContext.getResources(),
+                com.android.internal.R.drawable.ic_sim_card_multi_24px_clr);
+
+        mBstSubscriptionInfo = new SubscriptionInfo.Builder()
+                .setId(1)
+                .setIccId(iccId)
+                .setSimSlotIndex(0)
+                .setDisplayName("SIM 1")
+                .setCarrierName(getNetworkOperatorName())
+                .setDisplayNameSource(0)
+                .setIconTint(0xff000000)
+                .setDataRoaming(SubscriptionManager.DATA_ROAMING_DISABLE)
+                .setIcon(icon)
+                .setMcc(mcc)
+                .setMnc(mnc)
+                .setCountryIso(getNetworkCountryIso())
+                .build();
+    }
 
     /** @hide
     /* @deprecated - use getSystemService as described above */
@@ -2708,6 +2752,9 @@ public class TelephonyManager {
     @RequiresPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_RADIO_ACCESS)
     public List<NeighboringCellInfo> getNeighboringCellInfo() {
+        if (BST_TELEPHONY_CHANGES_ENABLED) {
+            return Collections.emptyList();
+        }
         try {
             ITelephony telephony = getITelephony();
             if (telephony == null)
@@ -2969,6 +3016,9 @@ public class TelephonyManager {
      */
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_RADIO_ACCESS)
     public String getNetworkCountryIso() {
+        if (BST_TELEPHONY_CHANGES_ENABLED) {
+            return SystemProperties.get(PROPERTY_ICC_OPERATOR_ISO_COUNTRY, "us");
+        }
         return getNetworkCountryIso(getSlotIndex());
     }
 
@@ -3645,6 +3695,9 @@ public class TelephonyManager {
      */
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)
     public boolean hasIccCard() {
+        if (BST_TELEPHONY_CHANGES_ENABLED) {
+            return true;
+        }
         return hasIccCard(getSlotIndex());
     }
 
@@ -3996,6 +4049,9 @@ public class TelephonyManager {
      */
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)
     public String getSimOperator() {
+        if (BST_TELEPHONY_CHANGES_ENABLED) {
+            return SystemProperties.get(PROPERTY_ICC_OPERATOR_NUMERIC, "310260");
+        }
         return getSimOperatorNumeric();
     }
 
@@ -4081,6 +4137,9 @@ public class TelephonyManager {
      */
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)
     public String getSimOperatorName() {
+        if (BST_TELEPHONY_CHANGES_ENABLED) {
+            return SystemProperties.get(PROPERTY_ICC_OPERATOR_ALPHA, "");
+        }
         return getSimOperatorNameForPhone(getPhoneId());
     }
 
@@ -4119,6 +4178,9 @@ public class TelephonyManager {
      */
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)
     public String getSimCountryIso() {
+        if (BST_TELEPHONY_CHANGES_ENABLED) {
+            return SystemProperties.get(PROPERTY_ICC_OPERATOR_ISO_COUNTRY, "");
+        }
         return getSimCountryIsoForPhone(getPhoneId());
     }
 
@@ -5299,6 +5361,15 @@ public class TelephonyManager {
     })
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)
     public String getLine1Number() {
+        if (BST_TELEPHONY_CHANGES_ENABLED) {
+            final String callingPackage = getOpPackageName();
+            if (mContext != null && !TelephonyPermissions.checkReadPhoneNumber(
+                    mContext, mSubId, Binder.getCallingPid(), Binder.getCallingUid(),
+                    callingPackage, getAttributionTag(), "getLine1Number")) {
+                return null;
+            }
+            return "";
+        }
         return getLine1Number(getSubId());
     }
 
@@ -6225,6 +6296,15 @@ public class TelephonyManager {
     @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_CALLING)
     public String getVoiceMailAlphaTag() {
+        if (BST_TELEPHONY_CHANGES_ENABLED) {
+            final String callingPackage = getOpPackageName();
+            if (mContext != null && !TelephonyPermissions.checkReadPhoneState(
+                    mContext, mSubId, Binder.getCallingPid(), Binder.getCallingUid(),
+                    callingPackage, getAttributionTag(), "getVoiceMailAlphaTag")) {
+                return null;
+            }
+            return "Voicemail";
+        }
         return getVoiceMailAlphaTag(getSubId());
     }
 

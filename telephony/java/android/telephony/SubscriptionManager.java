@@ -109,6 +109,9 @@ public class SubscriptionManager {
     private static final boolean DBG = false;
     private static final boolean VDBG = false;
 
+    /** @hide */
+    public static final boolean BST_TELEPHONY_CHANGES_ENABLED = true;
+
     /** An invalid subscription identifier */
     public static final int INVALID_SUBSCRIPTION_ID = -1;
 
@@ -2546,6 +2549,9 @@ public class SubscriptionManager {
      * subscriptionId doesn't have an associated slot index.
      */
     public static int getSlotIndex(int subscriptionId) {
+        if (BST_TELEPHONY_CHANGES_ENABLED && subscriptionId == 1) {
+            return 0;
+        }
         return sGetSlotIndexCache.query(subscriptionId);
     }
 
@@ -2612,6 +2618,9 @@ public class SubscriptionManager {
     /** @hide */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     public static int getPhoneId(int subId) {
+        if (BST_TELEPHONY_CHANGES_ENABLED && subId == 1) {
+            return 0;
+        }
         return sGetPhoneIdCache.query(subId);
     }
 
@@ -2633,6 +2642,9 @@ public class SubscriptionManager {
      * @return the "system" default subscription id.
      */
     public static int getDefaultSubscriptionId() {
+        if (BST_TELEPHONY_CHANGES_ENABLED) {
+            return 1;
+        }
         return sGetDefaultSubIdCacheAsUser.query(Process.myUserHandle().getIdentifier());
     }
 
@@ -2860,6 +2872,11 @@ public class SubscriptionManager {
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static boolean isValidPhoneId(int phoneId) {
         return phoneId >= 0 && phoneId < TelephonyManager.getDefault().getActiveModemCount();
+    }
+
+    /** @hide */
+    public static int getBstDefaultSubId() {
+        return 1;
     }
 
     /**
