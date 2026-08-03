@@ -1851,6 +1851,28 @@ static void ReloadBuildJavaConstants(JNIEnv* env) {
   env->SetStaticObjectField(build_cls, fieldId, new_fingerprint);
 }
 
+static void ReloadBstDeviceProfile(JNIEnv* env) {
+  static constexpr std::pair<const char*, const char*> kFields[] = {
+          {"BOARD", "ro.product.board"},
+          {"BRAND", "ro.product.brand"},
+          {"DEVICE", "ro.product.device"},
+          {"MANUFACTURER", "ro.product.manufacturer"},
+          {"MODEL", "ro.product.model"},
+          {"PRODUCT", "ro.product.name"},
+          {"FINGERPRINT", "ro.build.fingerprint"},
+          {"HARDWARE", "ro.hardware"},
+  };
+  ScopedLocalRef<jclass> build_class(env, env->FindClass("android/os/Build"));
+  if (build_class.get() == nullptr) {
+    env->ExceptionClear();
+    return;
+  }
+  for (const auto& [field, property] : kFields) {
+    ReloadBuildJavaConstant(
+            env, build_class.get(), field, "Ljava/lang/String;", property);
+  }
+}
+
 static void SetBuildVersionSdkInt(JNIEnv* env, jint value) {
   jclass build_version_cls = env->FindClass("android/os/Build$VERSION");
   if (build_version_cls == nullptr) {
@@ -2384,6 +2406,8 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, 
     } else if (is_system_server) {
         SetThreadName("system_server");
     }
+
+    ReloadBstDeviceProfile(env);
 
     const bool bst_debuggable =
             GetBoolProperty("bst.config.ro.debuggable", false)
