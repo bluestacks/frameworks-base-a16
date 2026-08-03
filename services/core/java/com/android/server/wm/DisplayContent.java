@@ -5210,6 +5210,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 && mWmService.mContext.getResources().getBoolean(
                 R.bool.config_checkWallpaperAtBoot);
 
+        // ImageWallpaper can fail to draw in the guest and otherwise hold boot for 30 seconds.
+        wallpaperEnabled = false;
+
         final boolean haveBootMsg = drawnWindowTypes.get(TYPE_BOOT_PROGRESS);
         final boolean haveApp = drawnWindowTypes.get(TYPE_BASE_APPLICATION);
         final boolean haveWallpaper = drawnWindowTypes.get(TYPE_WALLPAPER);
