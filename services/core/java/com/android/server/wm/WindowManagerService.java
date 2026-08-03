@@ -6952,10 +6952,26 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
+    private void stopBstSignInPopupService(int userId) {
+        if (!SystemProperties.getBoolean("bst.display_signin_popup", false)) {
+            return;
+        }
+        final Intent intent = new Intent("com.bluestacks.home.DISPLAY_SIGNIN_POPUP")
+                .setPackage("com.bluestacks.home");
+        try {
+            mContext.stopServiceAsUser(intent, UserHandle.of(userId));
+            SystemProperties.set("bst.display_signin_popup", "false");
+        } catch (RuntimeException e) {
+            Slog.w(TAG, "Unable to stop sign-in popup service", e);
+        }
+    }
+
     void bstNotifyActivityDisplayed(ActivityRecord activityRecord) {
         if (activityRecord == null) {
             return;
         }
+        stopBstSignInPopupService(activityRecord.mUserId);
+
         BstHostCallManager hostCall = mBstHostCallManagerService;
         if (hostCall == null) {
             try {
