@@ -93,7 +93,9 @@ import android.os.Message;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.Trace;
+import android.os.TransactionTooLargeException;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.telephony.TelephonyManager;
@@ -160,6 +162,10 @@ class BroadcastController {
     // Maximum number of receivers an app can register.
     private static final int MAX_RECEIVERS_ALLOWED_PER_APP = 1000;
 
+    private static final String TAG_BST_GPSTATS = TAG + "-GPStats";
+    private static final boolean DEBUG_BST_GPSTATS = DEBUG_BROADCAST
+            || SystemProperties.getInt("bst.debug.gpstats", 0) > 0;
+
     @NonNull
     private final Context mContext;
     @NonNull
@@ -172,6 +178,9 @@ class BroadcastController {
 
     @GuardedBy("mService")
     BroadcastStats mCurBroadcastStats;
+
+    @GuardedBy("mService")
+    private final HashMap<String, String> mBstGpStatsPreviousState = new HashMap<>();
 
     /**
      * Broadcast actions that will always be deliverable to unlaunched/background apps
@@ -856,6 +865,53 @@ class BroadcastController {
     }
 
     @GuardedBy("mService")
+    private void forwardBstGpDownloadStateLocked(String callerPackage, String action,
+            Intent intent, @UserIdInt int userId) {
+        if (!"com.android.vending".equals(callerPackage) || action == null
+                || !("com.android.launcher.action.ACTION_PACKAGE_ENQUEUED".equals(action)
+                || "com.android.launcher.action.ACTION_PACKAGE_DOWNLOADING".equals(action)
+                || "com.android.launcher.action.ACTION_PACKAGE_INSTALLING".equals(action)
+                || "com.android.launcher.action.ACTION_PACKAGE_DEQUEUED".equals(action))) {
+            return;
+        }
+
+        final Uri data = intent.getData();
+        final String packageName = data != null ? data.getSchemeSpecificPart() : null;
+        if (packageName == null) {
+            if (DEBUG_BST_GPSTATS) {
+                Log.w(TAG_BST_GPSTATS, "Package name is null for " + action);
+            }
+            return;
+        }
+
+        final String previousState = mBstGpStatsPreviousState.get(packageName);
+        if (DEBUG_BST_GPSTATS) {
+            Log.d(TAG_BST_GPSTATS, "Received action=" + action + ", package=" + packageName
+                    + ", caller=" + callerPackage + ", previousState=" + previousState);
+        }
+        if (action.equals(previousState)) {
+            return;
+        }
+
+        final Intent bstIntent = new Intent();
+        bstIntent.setPackage("com.bluestacks.home");
+        bstIntent.setAction(action.replace("com.android.launcher", "com.uncube.launcher3"));
+        final Bundle extras = intent.getExtras();
+        if (extras != null) {
+            bstIntent.putExtras(extras);
+        }
+        bstIntent.putExtra("pkgName", packageName);
+
+        try {
+            mService.mServices.startServiceLocked(null, bstIntent, null, 0, SYSTEM_UID, false,
+                    "android", null, userId, BackgroundStartPrivileges.NONE);
+            mBstGpStatsPreviousState.put(packageName, action);
+        } catch (TransactionTooLargeException | RuntimeException e) {
+            Slog.w(TAG_BST_GPSTATS, "Unable to forward Play Store download state", e);
+        }
+    }
+
+    @GuardedBy("mService")
     final int broadcastIntentLockedTraced(ProcessRecord callerApp, String callerPackage,
             @Nullable String callerFeatureId, Intent intent, String resolvedType,
             ProcessRecord resultToApp, IIntentReceiver resultTo, int resultCode, String resultData,
@@ -967,6 +1023,7 @@ class BroadcastController {
         }
 
         final String action = intent.getAction();
+        forwardBstGpDownloadStateLocked(callerPackage, action, intent, userId);
         if (brOptions != null) {
             if (brOptions.getTemporaryAppAllowlistDuration() > 0) {
                 // See if the caller is allowed to do this.  Note we are checking against
