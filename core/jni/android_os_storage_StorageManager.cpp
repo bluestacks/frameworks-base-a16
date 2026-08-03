@@ -28,45 +28,11 @@
 
 namespace android {
 
-jboolean android_os_storage_StorageManager_setQuotaProjectId(JNIEnv* env, jobject self,
-                                                             jstring path, jlong projectId) {
-    struct fsxattr fsx;
-    ScopedUtfChars utf_chars_path(env, path);
-
-    static bool sdcardFsSupported = IsSdcardfsUsed();
-    if (sdcardFsSupported) {
-        // sdcardfs doesn't support project ID quota tracking and takes care of quota
-        // in a different way.
-        return JNI_TRUE;
-    }
-
-    if (projectId > UINT32_MAX) {
-        LOG(ERROR) << "Invalid project id: " << projectId;
-        return JNI_FALSE;
-    }
-
-    android::base::unique_fd fd(
-            TEMP_FAILURE_RETRY(open(utf_chars_path.c_str(), O_RDONLY | O_CLOEXEC)));
-    if (fd == -1) {
-        PLOG(ERROR) << "Failed to open " << utf_chars_path.c_str() << " to set project id.";
-        return JNI_FALSE;
-    }
-
-    int ret = ioctl(fd, FS_IOC_FSGETXATTR, &fsx);
-    if (ret == -1) {
-        PLOG(ERROR) << "Failed to get extended attributes for " << utf_chars_path.c_str()
-                    << " to get project id.";
-        return JNI_FALSE;
-    }
-
-    fsx.fsx_projid = projectId;
-    ret = ioctl(fd, FS_IOC_FSSETXATTR, &fsx);
-    if (ret == -1) {
-        PLOG(ERROR) << "Failed to set extended attributes for " << utf_chars_path.c_str()
-                    << " to set project id.";
-        return JNI_FALSE;
-    }
-
+jboolean android_os_storage_StorageManager_setQuotaProjectId(JNIEnv* /*env*/, jobject /*self*/,
+                                                             jstring /*path*/, jlong /*projectId*/) {
+    // BlueStacks DataFS does not support Android project quota assignment. Treat the operation
+    // as successful so shared-storage writes are not rejected when the backing filesystem cannot
+    // service FS_IOC_FSGETXATTR or FS_IOC_FSSETXATTR.
     return JNI_TRUE;
 }
 
