@@ -86,6 +86,7 @@ import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
 import android.media.AudioManager;
+import android.media.AudioSystem;
 import android.media.session.MediaController;
 import android.net.Uri;
 import android.os.BadParcelableException;
@@ -2333,6 +2334,38 @@ public class Activity extends ContextThemeWrapper
         notifyContentCaptureManagerIfNeeded(CONTENT_CAPTURE_RESUME);
 
         mCalled = true;
+        adjustInstagramDmVolume();
+    }
+
+    private void adjustInstagramDmVolume() {
+        final ComponentName componentName = getComponentName();
+        if (Process.myUid() < Process.FIRST_APPLICATION_UID
+                || componentName == null
+                || !"com.instagram.android".equals(componentName.getPackageName())
+                || !"com.instagram.modal.TransparentModalActivity".equals(
+                        componentName.getClassName())) {
+            return;
+        }
+
+        new Thread(() -> {
+            int keyCode = KeyEvent.KEYCODE_VOLUME_UP;
+            boolean restore = true;
+            final AudioManager audioManager = getSystemService(AudioManager.class);
+            if (audioManager != null) {
+                final int volume = audioManager.getStreamVolume(AudioSystem.STREAM_MUSIC);
+                if (volume == 0) {
+                    restore = false;
+                } else if (volume == audioManager.getStreamMaxVolume(AudioSystem.STREAM_MUSIC)) {
+                    keyCode = KeyEvent.KEYCODE_VOLUME_DOWN;
+                }
+            }
+
+            mInstrumentation.sendKeyDownUpSync(keyCode);
+            if (restore) {
+                mInstrumentation.sendKeyDownUpSync(keyCode == KeyEvent.KEYCODE_VOLUME_UP
+                        ? KeyEvent.KEYCODE_VOLUME_DOWN : KeyEvent.KEYCODE_VOLUME_UP);
+            }
+        }, "BstInstagramVolume").start();
     }
 
     /**

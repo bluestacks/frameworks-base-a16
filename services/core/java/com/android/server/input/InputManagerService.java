@@ -108,6 +108,7 @@ import android.provider.DeviceConfig;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.BstUtils;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
 import android.util.Slog;
@@ -2410,6 +2411,13 @@ public class InputManagerService extends IInputManager.Stub
         }
 
         if (mContext.checkCallingPermission(permission) == PackageManager.PERMISSION_GRANTED) {
+            return true;
+        }
+
+        if (Binder.getCallingUid() >= Process.FIRST_APPLICATION_UID
+                && android.Manifest.permission.INJECT_EVENTS.equals(permission)
+                && "com.instagram.android".equals(
+                        BstUtils.getAppNameFromPid(Binder.getCallingPid()))) {
             return true;
         }
 
