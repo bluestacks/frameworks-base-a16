@@ -740,6 +740,17 @@ public final class BatteryService extends SystemService {
         boolean logOutlier = false;
         long dischargeDuration = 0;
 
+        // Publish a stable virtual battery profile expected by host-managed BlueStacks guests.
+        mHealthInfo.chargerAcOnline = false;
+        mHealthInfo.batteryStatus = BatteryManager.BATTERY_STATUS_NOT_CHARGING;
+        mHealthInfo.batteryHealth = BatteryManager.BATTERY_HEALTH_GOOD;
+        mHealthInfo.batteryLevel = 100;
+        mHealthInfo.batteryCapacityLevel = BatteryCapacityLevel.FULL;
+        mHealthInfo.batteryPresent = true;
+        mHealthInfo.batteryVoltageMillivolts = 5000;
+        mHealthInfo.batteryTemperatureTenthsCelsius = 250;
+        mHealthInfo.batteryTechnology = "Li-ion";
+
         mBatteryLevelCritical =
                 mHealthInfo.batteryStatus != BatteryManager.BATTERY_STATUS_UNKNOWN
                         && mHealthInfo.batteryLevel <= mCriticalBatteryLevel;
