@@ -22,6 +22,7 @@ import static android.content.pm.PackageManager.APP_METADATA_SOURCE_INSTALLER;
 import static android.content.pm.PackageManager.APP_METADATA_SOURCE_UNKNOWN;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
+import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED;
 import static android.content.pm.PackageManager.INSTALL_FAILED_ALREADY_EXISTS;
 import static android.content.pm.PackageManager.INSTALL_FAILED_BAD_PERMISSION_GROUP;
 import static android.content.pm.PackageManager.INSTALL_FAILED_DEPRECATED_SDK_VERSION;
@@ -4016,6 +4017,38 @@ final class InstallPackageHelper {
     }
 
     @GuardedBy({"mPm.mInstallLock", "mPm.mLock"})
+    private void handleBstBlacklistActionAfterScan(ParsedPackage parsedPackage) {
+        final String packageName = parsedPackage.getPackageName();
+        final PackageSetting packageSetting = mPm.mSettings.getPackageLPr(packageName);
+        if (packageSetting == null
+                || (packageSetting.isSystem() && !packageSetting.isUpdatedSystemApp())) {
+            return;
+        }
+        final BstFilterAppsManager filterApps = (BstFilterAppsManager)
+                mContext.getSystemService(Context.BST_FILTER_APPS);
+        if (filterApps == null) {
+            return;
+        }
+
+        final String action = filterApps.getBlackListAction(packageName);
+        final int enabledState = packageSetting.getEnabled(UserHandle.USER_SYSTEM);
+        if (filterApps.isBlackListed(packageName, parsedPackage.getVersionName())) {
+            if ("disable".equalsIgnoreCase(action)
+                    && enabledState != COMPONENT_ENABLED_STATE_DISABLED) {
+                packageSetting.setEnabled(COMPONENT_ENABLED_STATE_DISABLED,
+                        UserHandle.USER_SYSTEM, "android");
+            } else if ("uninstall".equalsIgnoreCase(action)) {
+                mPm.addBstBlacklistedPackageForUninstall(packageName);
+            }
+        }
+        if ("enable".equalsIgnoreCase(action)
+                && enabledState == COMPONENT_ENABLED_STATE_DISABLED) {
+            packageSetting.setEnabled(COMPONENT_ENABLED_STATE_ENABLED,
+                    UserHandle.USER_SYSTEM, "android");
+        }
+    }
+
+    @GuardedBy({"mPm.mInstallLock", "mPm.mLock"})
     private int scanDirectoryForFilesToParse(ParallelPackageParser parallelPackageParser,
             ScanParams scanParams) {
         final File[] files = scanParams.scanDir.listFiles();
@@ -4114,6 +4147,7 @@ final class InstallPackageHelper {
                 addForInitLI(result.parsedPackage, scanParams.parseFlags, scanParams.scanFlags,
                         new UserHandle(UserHandle.USER_SYSTEM), scanParams.apexInfo);
                 updateBstAbiEntryAfterScan(result.parsedPackage);
+                handleBstBlacklistActionAfterScan(result.parsedPackage);
             } catch (PackageManagerException e) {
                 errorCode = e.error;
                 errorMsg = "Failed to scan " + result.scanFile + ": " + e.getMessage();

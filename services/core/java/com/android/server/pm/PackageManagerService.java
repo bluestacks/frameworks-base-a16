@@ -263,11 +263,13 @@ import com.bluestacks.os.BstFilterAppsManager;
 import libcore.util.EmptyArray;
 import libcore.util.HexEncoding;
 
+import java.io.BufferedWriter;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileNotFoundException;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
@@ -938,8 +940,12 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     private static final long PRUNE_UNUSED_SHARED_LIBRARIES_DELAY =
             TimeUnit.MINUTES.toMillis(3); // 3 minutes
 
+    private static final String BST_BLACKLISTED_PACKAGE_LIST_PATH =
+            "/data/downloads/.tmp/.blc";
+
     // When the service constructor finished plus a delay (used for broadcast delay computation)
     private long mServiceStartWithDelay;
+    private final Set<String> mBstBlacklistedPackagesForUninstall = new ArraySet<>();
 
     static final long DEFAULT_UNUSED_STATIC_SHARED_LIB_MIN_CACHE_PERIOD =
             TimeUnit.DAYS.toMillis(7); /* 7 days */
@@ -2594,7 +2600,43 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
         mServiceStartWithDelay = SystemClock.uptimeMillis() + (60 * 1000L);
 
+        writeBstBlacklistedPackageList();
+
         Slog.i(TAG, "Fix for b/169414761 is applied");
+    }
+
+    void addBstBlacklistedPackageForUninstall(String packageName) {
+        mBstBlacklistedPackagesForUninstall.add(packageName);
+    }
+
+    private void writeBstBlacklistedPackageList() {
+        final File outputFile = new File(BST_BLACKLISTED_PACKAGE_LIST_PATH);
+        if (mBstBlacklistedPackagesForUninstall.isEmpty()) {
+            if (outputFile.exists() && !outputFile.delete()) {
+                Slog.w(TAG, "Unable to delete stale blacklist file " + outputFile);
+            }
+            return;
+        }
+
+        final File parent = outputFile.getParentFile();
+        if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.exists()) {
+            Slog.e(TAG, "Unable to create blacklist directory " + parent);
+            return;
+        }
+        final List<String> packages = new ArrayList<>(mBstBlacklistedPackagesForUninstall);
+        Collections.sort(packages);
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile, false))) {
+            for (String packageName : packages) {
+                writer.write(packageName);
+                writer.write(';');
+            }
+        } catch (IOException e) {
+            Slog.e(TAG, "Unable to write blacklisted package list " + outputFile, e);
+            return;
+        }
+        if (FileUtils.setPermissions(BST_BLACKLISTED_PACKAGE_LIST_PATH, 0644, -1, -1) != 0) {
+            Slog.e(TAG, "Unable to set permissions on blacklist file " + outputFile);
+        }
     }
 
     @GuardedBy("mLock")
