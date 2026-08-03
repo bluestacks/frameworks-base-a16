@@ -2260,14 +2260,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                     if (mLastPowerStateFromWifi == powerState) return;
 
                     mLastPowerStateFromWifi = powerState;
-                    if (mStats.isOnBattery()) {
-                        final String type =
-                                (powerState == DataConnectionRealTimeInfo.DC_POWER_STATE_HIGH
-                                || powerState == DataConnectionRealTimeInfo.DC_POWER_STATE_MEDIUM)
-                                ? "active" : "inactive";
-                        mWorker.scheduleSync("wifi-data: " + type,
-                                BatteryExternalStatsWorker.UPDATE_WIFI);
-                    }
+                    // The app-player guest has no authoritative external Wi-Fi battery stats.
                     mStats.noteWifiRadioPowerState(powerState, tsNanos, uid,
                             elapsedRealtime, uptime);
                 }
