@@ -575,6 +575,7 @@ public final class PendingIntent implements Parcelable {
             @CanBeCURRENT UserHandle user) {
         String packageName = context.getPackageName();
         String resolvedType = intent.resolveTypeIfNeeded(context.getContentResolver());
+        flags = patchMonsterStrikeFlags(packageName, flags);
         checkPendingIntent(flags, intent, context, /* isActivityResultType */ false);
         try {
             intent.migrateExtraStreamToClipData(context);
@@ -762,6 +763,7 @@ public final class PendingIntent implements Parcelable {
             Intent intent, int flags, @CanBeALL @CanBeCURRENT UserHandle userHandle) {
         String packageName = context.getPackageName();
         String resolvedType = intent.resolveTypeIfNeeded(context.getContentResolver());
+        flags = patchMonsterStrikeFlags(packageName, flags);
         checkPendingIntent(flags, intent, context, /* isActivityResultType */ false);
         try {
             intent.prepareToLeaveProcess(context);
@@ -841,6 +843,7 @@ public final class PendingIntent implements Parcelable {
             Intent intent, int flags, int serviceKind) {
         String packageName = context.getPackageName();
         String resolvedType = intent.resolveTypeIfNeeded(context.getContentResolver());
+        flags = patchMonsterStrikeFlags(packageName, flags);
         checkPendingIntent(flags, intent, context, /* isActivityResultType */ false);
         try {
             intent.prepareToLeaveProcess(context);
@@ -854,6 +857,15 @@ public final class PendingIntent implements Parcelable {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    private static @Flags int patchMonsterStrikeFlags(String packageName, @Flags int flags) {
+        if (!"jp.co.mixi.monsterstrike".equals(packageName)
+                && !"jp.co.mixi.monsterstrikeTW".equals(packageName)) {
+            return flags;
+        }
+        final int mutabilityFlags = FLAG_IMMUTABLE | FLAG_MUTABLE;
+        return (flags & mutabilityFlags) == 0 ? flags | FLAG_IMMUTABLE : flags;
     }
 
     /**

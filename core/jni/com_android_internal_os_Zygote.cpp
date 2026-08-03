@@ -1815,6 +1815,22 @@ static void ReloadBuildJavaConstants(JNIEnv* env) {
   env->SetStaticObjectField(build_cls, fieldId, new_fingerprint);
 }
 
+static void SetBuildVersionSdkInt(JNIEnv* env, jint value) {
+  jclass build_version_cls = env->FindClass("android/os/Build$VERSION");
+  if (build_version_cls == nullptr) {
+    env->ExceptionClear();
+    ALOGW("Unable to find android.os.Build.VERSION");
+    return;
+  }
+  jfieldID field_id = env->GetStaticFieldID(build_version_cls, "SDK_INT", "I");
+  if (field_id == nullptr) {
+    env->ExceptionClear();
+    ALOGW("Unable to find Build.VERSION.SDK_INT");
+    return;
+  }
+  env->SetStaticIntField(build_version_cls, field_id, value);
+}
+
 static void BindMountSyspropOverride(fail_fn_t fail_fn, JNIEnv* env) {
   std::string source = "/dev/__properties__/appcompat_override";
   std::string target = "/dev/__properties__";
@@ -2103,6 +2119,11 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, 
     runtime_flags &= ~RuntimeFlags::NATIVE_HEAP_ZERO_INIT_ENABLED;
 
     const char* nice_name_ptr = nice_name.has_value() ? nice_name.value().c_str() : nullptr;
+    if (uid >= AID_APP_START && nice_name_ptr != nullptr
+            && strncmp(nice_name_ptr, "jp.co.mixi.monsterstrike",
+                       strlen("jp.co.mixi.monsterstrike")) == 0) {
+        SetBuildVersionSdkInt(env, 30);
+    }
     android_mallopt_gwp_asan_options_t gwp_asan_options;
     const char* kGwpAsanAppRecoverableSysprop =
             "persist.device_config.memory_safety_native.gwp_asan_recoverable_apps";
