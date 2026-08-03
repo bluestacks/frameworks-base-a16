@@ -28,6 +28,7 @@ import android.graphics.Insets
 import android.graphics.Rect
 import android.net.Uri
 import android.os.Process
+import android.os.SystemProperties
 import android.os.UserHandle
 import android.os.UserManager
 import android.provider.Settings
@@ -54,9 +55,12 @@ import com.android.systemui.screenshot.ScreenshotShelfViewProxy.ScreenshotViewCa
 import com.android.systemui.screenshot.scroll.ScrollCaptureController.LongScreenshot
 import com.android.systemui.screenshot.scroll.ScrollCaptureExecutor
 import com.android.systemui.util.Assert
+import com.bluestacks.os.BstHostCallManager
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
+import java.io.File
+import java.io.FileOutputStream
 import java.util.UUID
 import java.util.concurrent.Executor
 import java.util.concurrent.ExecutorService
@@ -106,6 +110,8 @@ internal constructor(
     private var screenshotTakenInPortrait = false
     private var screenshotAnimation: Animator? = null
     private var packageName = ""
+
+    private val disableAnimation = SystemProperties.getInt("bst.config.dis_anim", 0) > 0
 
     /** Tracks config changes that require re-creating UI */
     private val configChanges =
@@ -247,8 +253,13 @@ internal constructor(
         }
 
         viewProxy.prepareEntranceAnimation {
-            startAnimation(bounds, showFlash) {
+            val onAnimationComplete = Runnable {
                 messageContainerController.onScreenshotTaken(screenshot)
+            }
+            if (disableAnimation) {
+                onAnimationComplete.run()
+            } else {
+                startAnimation(bounds, showFlash, onAnimationComplete)
             }
         }
 
@@ -519,23 +530,47 @@ internal constructor(
             {
                 try {
                     val result = future.get()
-                    Log.d(TAG, "Saved screenshot: $result")
-                    logScreenshotResultStatus(result.uri, screenshot.userHandle)
-                    onResult.accept(result)
-                    if (LogConfig.DEBUG_CALLBACK) {
-                        Log.d(TAG, "finished bg processing, calling back with uri: ${result.uri}")
+                    copyToSharedFolderAndNotifyHost(result)
+                    mainExecutor.execute {
+                        Log.d(TAG, "Saved screenshot: $result")
+                        logScreenshotResultStatus(result.uri, screenshot.userHandle)
+                        onResult.accept(result)
+                        if (LogConfig.DEBUG_CALLBACK) {
+                            Log.d(
+                                TAG,
+                                "finished bg processing, calling back with uri: ${result.uri}",
+                            )
+                        }
+                        finisher.accept(result.uri)
                     }
-                    finisher.accept(result.uri)
                 } catch (e: Exception) {
-                    Log.d(TAG, "Failed to store screenshot", e)
-                    if (LogConfig.DEBUG_CALLBACK) {
-                        Log.d(TAG, "calling back with uri: null")
+                    mainExecutor.execute {
+                        Log.d(TAG, "Failed to store screenshot", e)
+                        if (LogConfig.DEBUG_CALLBACK) {
+                            Log.d(TAG, "calling back with uri: null")
+                        }
+                        finisher.accept(null)
                     }
-                    finisher.accept(null)
                 }
             },
-            mainExecutor,
+            bgExecutor,
         )
+    }
+
+    private fun copyToSharedFolderAndNotifyHost(result: ImageExporter.Result) {
+        try {
+            val destination = File(SHARED_SCREENSHOT_DIRECTORY, result.fileName)
+            context.contentResolver.openInputStream(result.uri)?.use { input ->
+                FileOutputStream(destination).use { output -> input.copyTo(output) }
+            } ?: throw IllegalStateException("Unable to open saved screenshot ${result.uri}")
+
+            context.getSystemService(BstHostCallManager::class.java)?.onScreenshotSaved(
+                result.fileName
+            )
+        } catch (e: Exception) {
+            // MediaStore save succeeded; shared-folder integration must remain fail-open.
+            Log.w(TAG, "Unable to publish screenshot to BlueStacks shared folder", e)
+        }
     }
 
     /** Logs success/failure of the screenshot saving task, and shows an error if it failed. */
@@ -579,6 +614,8 @@ internal constructor(
 
     companion object {
         private val TAG: String = LogConfig.logTag(ScreenshotController::class.java)
+
+        private const val SHARED_SCREENSHOT_DIRECTORY = "/mnt/windows/BstSharedFolder"
 
         // From WizardManagerHelper.java
         private const val SETTINGS_SECURE_USER_SETUP_COMPLETE = "user_setup_complete"

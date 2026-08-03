@@ -66,7 +66,7 @@ public class ImageExporter {
     static final Duration PENDING_ENTRY_TTL = Duration.ofHours(24);
 
     // ex: 'Screenshot_20201215-090626.png'
-    private static final String FILENAME_PATTERN = "Screenshot_%1$tY%<tm%<td-%<tH%<tM%<tS.%2$s";
+    private static final String FILENAME_PATTERN = "Screenshot_%1$tY.%<tm.%<td_%<tH.%<tM.%<tS.%2$s";
     // ex: 'Screenshot_20201215-090626-display-1.png'
     private static final String CONNECTED_DISPLAY_FILENAME_PATTERN =
             "Screenshot_%1$tY%<tm%<td-%<tH%<tM%<tS-display-%2$d.%3$s";
