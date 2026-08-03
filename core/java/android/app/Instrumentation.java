@@ -216,6 +216,128 @@ public class Instrumentation {
         }
     }
 
+    @Nullable
+    private Intent checkIfLaunchingGpStore(Context context, Intent intent) {
+        final String intentData = intent.getDataString();
+        if (intentData == null) {
+            return null;
+        }
+
+        final String callerPackage = context.getBasePackageName();
+        if (isPlayStoreDetailsUri(intentData)) {
+            final String calleePackage = parsePackageName(intentData);
+            if (BST_DBG) {
+                Log.d(BST_TAG, "callerPackage=" + callerPackage
+                        + ", calleePackage=" + calleePackage);
+            }
+            return callerPackage != null && callerPackage.equalsIgnoreCase(calleePackage)
+                    ? intent : null;
+        }
+
+        if (intentData.startsWith("https://ffgpdownload.freefiremobile.com/api/link")
+                && "com.dts.freefiremax".equalsIgnoreCase(callerPackage)) {
+            final Intent marketIntent = new Intent(Intent.ACTION_VIEW);
+            marketIntent.setData(Uri.parse("market://details?id=" + callerPackage));
+            return marketIntent;
+        }
+        return null;
+    }
+
+    private static boolean isPlayStoreDetailsUri(String data) {
+        return data.startsWith("https://play.google.com/store/apps/details")
+                || data.startsWith("http://play.google.com/store/apps/details")
+                || data.startsWith("https://market.android.com/details")
+                || data.startsWith("http://market.android.com/details")
+                || data.startsWith("market://details");
+    }
+
+    @Nullable
+    private String parsePackageName(String data) {
+        try {
+            return Uri.parse(data).getQueryParameter("id");
+        } catch (RuntimeException e) {
+            Log.e(BST_TAG, "Unable to parse package from " + data, e);
+            return null;
+        }
+    }
+
+    @Nullable
+    private String getApkUpdateSource(Context context, Intent intent) {
+        final String packageName = parsePackageName(intent.getDataString());
+        if (packageName == null) {
+            return null;
+        }
+        final BstUtilsManager bstUtils = (BstUtilsManager) context.getSystemService(
+                Context.BST_UTILS);
+        if (bstUtils == null) {
+            return null;
+        }
+
+        final String source = bstUtils.getApkDownloadSource(packageName, "update");
+        if (source == null || source.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            final String appStore = new JSONObject(source).optString("app_store");
+            return "com.android.vending".equals(appStore) ? null : source;
+        } catch (Exception e) {
+            Log.e(BST_TAG, "Unable to parse app store update source", e);
+            return null;
+        }
+    }
+
+    private void launchAppStore(Context context, Intent intent, String apkUpdateSource) {
+        final String packageName = parsePackageName(intent.getDataString());
+        final BstUtilsManager bstUtils = (BstUtilsManager) context.getSystemService(
+                Context.BST_UTILS);
+        if (packageName != null && bstUtils != null) {
+            bstUtils.launchAppStore(packageName, apkUpdateSource);
+        }
+    }
+
+    private boolean isLaunchingNonGpAppStore(Context context, Intent intent) {
+        final Intent storeIntent = checkIfLaunchingGpStore(context, intent);
+        if (storeIntent == null) {
+            return false;
+        }
+        final String updateSource = getApkUpdateSource(context, storeIntent);
+        if (updateSource == null) {
+            return false;
+        }
+        launchAppStore(context, storeIntent, updateSource);
+        return true;
+    }
+
+    private boolean fwdIntentToHost(Context context, Intent intent) {
+        if (!intent.getBooleanExtra("openOnHostBrowser", false)) {
+            return false;
+        }
+        final Uri data = intent.getData();
+        if (data == null) {
+            return true;
+        }
+
+        final BstHostCallManager hostCall = (BstHostCallManager) context.getSystemService(
+                Context.BST_HOST_CALL);
+        if (hostCall == null) {
+            Log.w(BST_TAG, "Host call service unavailable for browser intent");
+            return false;
+        }
+        if (BST_DBG) {
+            Log.d(BST_TAG, "Forwarding browser intent data: " + data);
+        }
+        hostCall.openUrl(data.toString());
+        return true;
+    }
+
+    private int handleBstActivityStartResult(Context context, Intent intent, int result) {
+        if (result == ActivityManager.START_INTENT_NOT_RESOLVED
+                || result == ActivityManager.START_CLASS_NOT_FOUND) {
+            return bstHandleProprietryIntents(context, result, intent);
+        }
+        return result;
+    }
+
 
     private static final long CONNECT_TIMEOUT_MILLIS = 60_000;
 
@@ -2081,6 +2203,9 @@ public class Instrumentation {
                     + " requestCode=" + requestCode + " options=" + options, new Throwable());
         }
         Objects.requireNonNull(intent);
+        if (isLaunchingNonGpAppStore(who, intent)) {
+            return null;
+        }
         IApplicationThread whoThread = (IApplicationThread) contextThread;
         Uri referrer = target != null ? target.onProvideReferrer() : null;
         if (referrer != null) {
@@ -2117,10 +2242,17 @@ public class Instrumentation {
         try {
             intent.migrateExtraStreamToClipData(who);
             intent.prepareToLeaveProcess(who);
-            int result = ActivityTaskManager.getService().startActivity(whoThread,
-                    who.getOpPackageName(), who.getAttributionTag(), intent,
-                    intent.resolveTypeIfNeeded(who.getContentResolver()), token,
-                    target != null ? target.mEmbeddedID : null, requestCode, 0, null, options);
+            bstReferrerHack(who, intent);
+            int result;
+            if (fwdIntentToHost(who, intent)) {
+                result = ActivityManager.START_SUCCESS;
+            } else {
+                result = ActivityTaskManager.getService().startActivity(whoThread,
+                        who.getOpPackageName(), who.getAttributionTag(), intent,
+                        intent.resolveTypeIfNeeded(who.getContentResolver()), token,
+                        target != null ? target.mEmbeddedID : null, requestCode, 0, null, options);
+            }
+            result = handleBstActivityStartResult(who, intent, result);
             notifyStartActivityResult(result, options);
             checkStartActivityResult(result, intent);
         } catch (RemoteException e) {
@@ -2172,6 +2304,9 @@ public class Instrumentation {
         for (int i = intents.length - 1; i >= 0; i--) {
             Objects.requireNonNull(intents[i]);
         }
+        if (isLaunchingNonGpAppStore(who, intents[0])) {
+            return ActivityManager.START_SUCCESS;
+        }
         IApplicationThread whoThread = (IApplicationThread) contextThread;
         if (isSdkSandboxAllowedToStartActivities()) {
             for (Intent intent : intents) {
@@ -2210,9 +2345,16 @@ public class Instrumentation {
                 intents[i].prepareToLeaveProcess(who);
                 resolvedTypes[i] = intents[i].resolveTypeIfNeeded(who.getContentResolver());
             }
-            int result = ActivityTaskManager.getService().startActivities(whoThread,
-                    who.getOpPackageName(), who.getAttributionTag(), intents, resolvedTypes,
-                    token, options, userId);
+            bstReferrerHack(who, intents[0]);
+            int result;
+            if (fwdIntentToHost(who, intents[0])) {
+                result = ActivityManager.START_SUCCESS;
+            } else {
+                result = ActivityTaskManager.getService().startActivities(whoThread,
+                        who.getOpPackageName(), who.getAttributionTag(), intents, resolvedTypes,
+                        token, options, userId);
+            }
+            result = handleBstActivityStartResult(who, intents[0], result);
             notifyStartActivityResult(result, options);
             checkStartActivityResult(result, intents[0]);
             return result;
@@ -2258,6 +2400,9 @@ public class Instrumentation {
                     + " options=" + options, new Throwable());
         }
         Objects.requireNonNull(intent);
+        if (isLaunchingNonGpAppStore(who, intent)) {
+            return null;
+        }
         IApplicationThread whoThread = (IApplicationThread) contextThread;
         if (isSdkSandboxAllowedToStartActivities()) {
             adjustIntentForCtsInSdkSandboxInstrumentation(intent);
@@ -2290,10 +2435,17 @@ public class Instrumentation {
         try {
             intent.migrateExtraStreamToClipData(who);
             intent.prepareToLeaveProcess(who);
-            int result = ActivityTaskManager.getService().startActivity(whoThread,
-                    who.getOpPackageName(), who.getAttributionTag(), intent,
-                    intent.resolveTypeIfNeeded(who.getContentResolver()), token, target,
-                    requestCode, 0, null, options);
+            bstReferrerHack(who, intent);
+            int result;
+            if (fwdIntentToHost(who, intent)) {
+                result = ActivityManager.START_SUCCESS;
+            } else {
+                result = ActivityTaskManager.getService().startActivity(whoThread,
+                        who.getOpPackageName(), who.getAttributionTag(), intent,
+                        intent.resolveTypeIfNeeded(who.getContentResolver()), token, target,
+                        requestCode, 0, null, options);
+            }
+            result = handleBstActivityStartResult(who, intent, result);
             notifyStartActivityResult(result, options);
             checkStartActivityResult(result, intent);
         } catch (RemoteException e) {
@@ -2338,6 +2490,9 @@ public class Instrumentation {
                     + " options=" + options, new Throwable());
         }
         Objects.requireNonNull(intent);
+        if (isLaunchingNonGpAppStore(who, intent)) {
+            return null;
+        }
         IApplicationThread whoThread = (IApplicationThread) contextThread;
         if (isSdkSandboxAllowedToStartActivities()) {
             adjustIntentForCtsInSdkSandboxInstrumentation(intent);
@@ -2370,10 +2525,17 @@ public class Instrumentation {
         try {
             intent.migrateExtraStreamToClipData(who);
             intent.prepareToLeaveProcess(who);
-            int result = ActivityTaskManager.getService().startActivityAsUser(whoThread,
-                    who.getOpPackageName(), who.getAttributionTag(), intent,
-                    intent.resolveTypeIfNeeded(who.getContentResolver()), token, resultWho,
-                    requestCode, 0, null, options, user.getIdentifier());
+            bstReferrerHack(who, intent);
+            int result;
+            if (fwdIntentToHost(who, intent)) {
+                result = ActivityManager.START_SUCCESS;
+            } else {
+                result = ActivityTaskManager.getService().startActivityAsUser(whoThread,
+                        who.getOpPackageName(), who.getAttributionTag(), intent,
+                        intent.resolveTypeIfNeeded(who.getContentResolver()), token, resultWho,
+                        requestCode, 0, null, options, user.getIdentifier());
+            }
+            result = handleBstActivityStartResult(who, intent, result);
             notifyStartActivityResult(result, options);
             checkStartActivityResult(result, intent);
         } catch (RemoteException e) {
@@ -2398,6 +2560,9 @@ public class Instrumentation {
                     new Throwable());
         }
         Objects.requireNonNull(intent);
+        if (isLaunchingNonGpAppStore(who, intent)) {
+            return null;
+        }
         IApplicationThread whoThread = (IApplicationThread) contextThread;
         if (isSdkSandboxAllowedToStartActivities()) {
             adjustIntentForCtsInSdkSandboxInstrumentation(intent);
@@ -2430,12 +2595,19 @@ public class Instrumentation {
         try {
             intent.migrateExtraStreamToClipData(who);
             intent.prepareToLeaveProcess(who);
-            int result = ActivityTaskManager.getService()
-                    .startActivityAsCaller(whoThread, who.getOpPackageName(), intent,
-                            intent.resolveTypeIfNeeded(who.getContentResolver()),
-                            token, target != null ? target.mEmbeddedID : null,
-                            requestCode, 0, null, options,
-                            ignoreTargetSecurity, userId);
+            bstReferrerHack(who, intent);
+            int result;
+            if (fwdIntentToHost(who, intent)) {
+                result = ActivityManager.START_SUCCESS;
+            } else {
+                result = ActivityTaskManager.getService()
+                        .startActivityAsCaller(whoThread, who.getOpPackageName(), intent,
+                                intent.resolveTypeIfNeeded(who.getContentResolver()),
+                                token, target != null ? target.mEmbeddedID : null,
+                                requestCode, 0, null, options,
+                                ignoreTargetSecurity, userId);
+            }
+            result = handleBstActivityStartResult(who, intent, result);
             notifyStartActivityResult(result, options);
             checkStartActivityResult(result, intent);
         } catch (RemoteException e) {
@@ -2457,6 +2629,9 @@ public class Instrumentation {
                     + " options=" + options, new Throwable());
         }
         Objects.requireNonNull(intent);
+        if (isLaunchingNonGpAppStore(who, intent)) {
+            return;
+        }
         IApplicationThread whoThread = (IApplicationThread) contextThread;
         if (isSdkSandboxAllowedToStartActivities()) {
             adjustIntentForCtsInSdkSandboxInstrumentation(intent);
@@ -2489,9 +2664,16 @@ public class Instrumentation {
         try {
             intent.migrateExtraStreamToClipData(who);
             intent.prepareToLeaveProcess(who);
-            int result = appTask.startActivity(whoThread.asBinder(), who.getOpPackageName(),
-                    who.getAttributionTag(), intent,
-                    intent.resolveTypeIfNeeded(who.getContentResolver()), options);
+            bstReferrerHack(who, intent);
+            int result;
+            if (fwdIntentToHost(who, intent)) {
+                result = ActivityManager.START_SUCCESS;
+            } else {
+                result = appTask.startActivity(whoThread.asBinder(), who.getOpPackageName(),
+                        who.getAttributionTag(), intent,
+                        intent.resolveTypeIfNeeded(who.getContentResolver()), options);
+            }
+            result = handleBstActivityStartResult(who, intent, result);
             notifyStartActivityResult(result, options);
             checkStartActivityResult(result, intent);
         } catch (RemoteException e) {
