@@ -690,6 +690,12 @@ static void EnableKeepCapabilities(fail_fn_t fail_fn) {
 }
 
 static void DropCapabilitiesBoundingSet(fail_fn_t fail_fn, jlong bounding_capabilities) {
+  // BlueStacks supports legacy su/file-capability binaries in guest processes. Keep the
+  // zygote's capability bounding set so execve can honor those file capabilities.
+  return;
+
+  // Retain the upstream implementation for straightforward re-enablement and review.
+#if 0
   for (int i = 0; prctl(PR_CAPBSET_READ, i, 0, 0, 0) >= 0; i++) {;
     if ((1LL << i) & bounding_capabilities) continue;
     if (prctl(PR_CAPBSET_DROP, i, 0, 0, 0) == -1) {
@@ -701,6 +707,7 @@ static void DropCapabilitiesBoundingSet(fail_fn_t fail_fn, jlong bounding_capabi
       }
     }
   }
+#endif
 }
 
 static bool MatchGid(JNIEnv* env, jintArray gids, jint gid, jint gid_to_find) {
