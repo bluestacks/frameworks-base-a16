@@ -1082,13 +1082,13 @@ class ActivityStarter {
                 ? UserHandle.getUserId(aInfo.applicationInfo.uid) : 0;
         final int launchMode = aInfo != null ? aInfo.launchMode : 0;
 
-        // A16DBG:P2:FW-WM ActivityStarter — a13 hideBlueStacksPkg + optional GRM (kill-switch)
+        // A16DBG:P2:FW-WM ActivityStarter - a13 hideBlueStacksPkg + GRM
         if (err == ActivityManager.START_SUCCESS && intent != null && intent.getComponent() != null) {
             final String launchPkg = intent.getComponent().getPackageName();
             try {
                 mService.mContext.getPackageManager().getPackageInfo(launchPkg, 0);
-                // GRM: default OFF (persist.bst.grm.launch_check=1 to match a13). Past Batch B Layer2 risk.
-                if (android.os.SystemProperties.getBoolean("persist.bst.grm.launch_check", false)) {
+                // Match A13 by default; the property remains an emergency compatibility switch.
+                if (android.os.SystemProperties.getBoolean("persist.bst.grm.launch_check", true)) {
                     boolean bstCheckGrm = (aInfo != null) ? !aInfo.applicationInfo.isSystemApp() : true;
                     if (bstCheckGrm && callingPackage != null && launchPkg != null
                             && !callingPackage.equals("com.bluestacks.BstCommandProcessor")
@@ -1106,6 +1106,11 @@ class ActivityStarter {
                 }
             } catch (android.content.pm.PackageManager.NameNotFoundException e) {
                 Slog.w(TAG, "A16DBG:P2:FW-WM launchPkg=" + launchPkg + " not installed; skip GRM");
+            }
+            if ("android.settings.SYSTEM_UPDATE_COMPLETE".equals(intent.getAction())
+                    && "com.google.android.gms".equals(launchPkg)) {
+                Slog.i(TAG, "Not launching system update popup dialog");
+                return err;
             }
             int bstUid = android.os.Binder.getCallingUid();
             if (bstUid >= 10000) {

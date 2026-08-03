@@ -157,6 +157,7 @@ import com.android.server.input.data.InputDataStore;
 import com.android.server.input.debug.FocusEventDebugView;
 import com.android.server.input.debug.TouchpadDebugViewController;
 import com.android.server.policy.WindowManagerPolicy;
+import com.bluestacks.os.BstHostCallManager;
 
 import libcore.io.IoUtils;
 
@@ -208,6 +209,7 @@ public class InputManagerService extends IInputManager.Stub
 
     private final Context mContext;
     private final InputManagerHandler mHandler;
+    private BstHostCallManager mBstHostCallManagerService;
     private DisplayManagerInternal mDisplayManagerInternal;
 
     private final File mDoubleTouchGestureEnableFile;
@@ -1408,6 +1410,18 @@ public class InputManagerService extends IInputManager.Stub
             throw new IllegalArgumentException("Invalid pointer capture mode " + mode);
         }
 
+        if (mBstHostCallManagerService == null) {
+            mBstHostCallManagerService = (BstHostCallManager) mContext.getSystemService(
+                    Context.BST_HOST_CALL);
+        }
+        if (mBstHostCallManagerService != null) {
+            final String action = mode == View.POINTER_CAPTURE_MODE_UNCAPTURED
+                    ? "disablePan" : "enablePan";
+            final int result = mBstHostCallManagerService.onSetMouseAction(" ", " ", action);
+            if (result != 0) {
+                Slog.w(TAG, "Unable to send pointer capture state to host: " + result);
+            }
+        }
         mNative.requestPointerCapture(inputChannelToken, mode);
     }
 

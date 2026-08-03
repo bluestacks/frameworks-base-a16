@@ -498,6 +498,7 @@ import com.android.server.wm.ActivityTaskManagerService;
 import com.android.server.wm.WindowManagerInternal;
 import com.android.server.wm.WindowManagerService;
 import com.android.server.wm.WindowProcessController;
+import com.bluestacks.os.BstHostCallManager;
 
 import dalvik.annotation.optimization.NeverCompile;
 import dalvik.system.VMRuntime;
@@ -17640,6 +17641,15 @@ public class ActivityManagerService extends IActivityManager.Stub
                             null, null, OP_NONE, bOptions.toBundle(), false, false, MY_PID,
                             SYSTEM_UID, Binder.getCallingUid(), Binder.getCallingPid(),
                             UserHandle.USER_ALL);
+                    final BstHostCallManager hostCall = (BstHostCallManager)
+                            mContext.getSystemService(Context.BST_HOST_CALL);
+                    if (hostCall != null) {
+                        final int result = hostCall.onLocaleChanged(
+                                SystemProperties.get("persist.sys.locale", ""));
+                        if (result != 0) {
+                            Slog.w(TAG, "Unable to send locale change to host: " + result);
+                        }
+                    }
                 }
 
                 // Send a broadcast to PackageInstallers if the configuration change is interesting
