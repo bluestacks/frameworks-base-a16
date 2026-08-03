@@ -36,6 +36,7 @@ import com.android.internal.pm.parsing.pkg.ParsedPackage;
 import com.android.internal.pm.pkg.component.AconfigFlags;
 import com.android.internal.pm.pkg.parsing.ParsingPackageUtils;
 import com.android.server.pm.ApexManager;
+import com.android.server.pm.PackageManagerService;
 
 import libcore.io.IoUtils;
 
@@ -209,7 +210,8 @@ public class PackageCacher implements IPackageCacher {
 
         try {
             // If the cache is not up to date, return null.
-            if (!isCacheFileUpToDate(packageFile, cacheFile)) {
+            if (PackageManagerService.bstIsFirstBootAfterUpgrade()
+                    || !isCacheFileUpToDate(packageFile, cacheFile)) {
                 return null;
             }
 
