@@ -193,6 +193,11 @@ final class ZeroJankProxy implements IInputMethodManagerImpl.Callback {
         mInner.showInputMethodPickerFromClient(client, auxiliarySubtypeMode);
     }
 
+    @Override
+    public void setBstIMEFromClient(String imeId) {
+        mInner.setBstIMEFromClient(imeId);
+    }
+
     @IInputMethodManagerImpl.PermissionVerified(allOf = {
             Manifest.permission.INTERACT_ACROSS_USERS_FULL,
             Manifest.permission.WRITE_SECURE_SETTINGS})
@@ -370,4 +375,3 @@ final class ZeroJankProxy implements IInputMethodManagerImpl.Callback {
         mInner.dump(fd, fout, args);
     }
 }
-

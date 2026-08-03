@@ -338,6 +338,19 @@ final class IInputMethodManagerGlobalInvoker {
     }
 
     @AnyThread
+    static void setBstIMEFromClient(@NonNull String imeId) {
+        final IInputMethodManager service = getService();
+        if (service == null) {
+            return;
+        }
+        try {
+            service.setBstIMEFromClient(imeId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    @AnyThread
     @RequiresPermission(allOf = {
             Manifest.permission.WRITE_SECURE_SETTINGS,
             Manifest.permission.INTERACT_ACROSS_USERS_FULL})

@@ -104,6 +104,8 @@ interface IInputMethodManager {
     oneway void showInputMethodPickerFromClient(in IInputMethodClient client,
             int auxiliarySubtypeMode);
 
+    oneway void setBstIMEFromClient(String imeId);
+
     @EnforcePermission(allOf = {"WRITE_SECURE_SETTINGS", "INTERACT_ACROSS_USERS_FULL"})
     @JavaPassthrough(annotation="@android.annotation.RequiresPermission(allOf = {android.Manifest."
     + "permission.WRITE_SECURE_SETTINGS, android.Manifest.permission.INTERACT_ACROSS_USERS_FULL})")

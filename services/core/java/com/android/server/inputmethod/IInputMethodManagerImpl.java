@@ -126,6 +126,8 @@ final class IInputMethodManagerImpl extends IInputMethodManager.Stub {
 
         void showInputMethodPickerFromClient(IInputMethodClient client, int auxiliarySubtypeMode);
 
+        void setBstIMEFromClient(String imeId);
+
         @PermissionVerified(allOf = {
                 Manifest.permission.INTERACT_ACROSS_USERS_FULL,
                 Manifest.permission.WRITE_SECURE_SETTINGS})
@@ -298,6 +300,11 @@ final class IInputMethodManagerImpl extends IInputMethodManager.Stub {
     public void showInputMethodPickerFromClient(IInputMethodClient client,
             int auxiliarySubtypeMode) {
         mCallback.showInputMethodPickerFromClient(client, auxiliarySubtypeMode);
+    }
+
+    @Override
+    public void setBstIMEFromClient(String imeId) {
+        mCallback.setBstIMEFromClient(imeId);
     }
 
     @EnforcePermission(allOf = {

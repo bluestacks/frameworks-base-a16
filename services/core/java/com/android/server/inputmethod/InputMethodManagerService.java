@@ -4097,6 +4097,28 @@ public final class InputMethodManagerService implements IInputMethodManagerImpl.
         }
     }
 
+    @Override
+    public void setBstIMEFromClient(String imeId) {
+        if (TextUtils.isEmpty(imeId)) {
+            Slog.w(TAG, "Ignoring empty BlueStacks IME id");
+            return;
+        }
+        final int callingUserId = UserHandle.getCallingUserId();
+        mHandler.post(() -> {
+            synchronized (ImfLock.class) {
+                final int userId = resolveImeUserIdLocked(callingUserId);
+                final InputMethodSettings settings = InputMethodSettingsRepository.get(userId);
+                if (!settings.getMethodMap().containsKey(imeId)) {
+                    Slog.w(TAG, "Ignoring unknown BlueStacks IME id: " + imeId);
+                    return;
+                }
+                setInputMethodEnabledLocked(imeId, true, userId);
+                updateInputMethodsFromSettingsLocked(true, userId);
+                setInputMethodLocked(imeId, NOT_A_SUBTYPE_INDEX, userId);
+            }
+        });
+    }
+
     @IInputMethodManagerImpl.PermissionVerified(allOf = {
             Manifest.permission.INTERACT_ACROSS_USERS_FULL,
             Manifest.permission.WRITE_SECURE_SETTINGS})

@@ -4585,6 +4585,20 @@ public final class InputMethodManager {
         IInputMethodManagerGlobalInvoker.showInputMethodPickerFromSystem(mode, displayId);
     }
 
+    /**
+     * Enables and selects the supplied input method.
+     *
+     * @hide
+     */
+    public void setBstIME(@NonNull String imeId) {
+        try {
+            Log.d(TAG, "setBstIME: " + imeId);
+            IInputMethodManagerGlobalInvoker.setBstIMEFromClient(imeId);
+        } catch (Exception e) {
+            Log.w(TAG, "Unable to set BlueStacks IME", e);
+        }
+    }
+
     @GuardedBy("mH")
     private void showInputMethodPickerLocked() {
         IInputMethodManagerGlobalInvoker.showInputMethodPickerFromClient(mClient,
