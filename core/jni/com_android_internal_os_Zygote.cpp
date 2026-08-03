@@ -2109,6 +2109,23 @@ static std::optional<std::string> BstMemorySizeForPackage(const std::string& pac
   return std::nullopt;
 }
 
+static void UpdateInstagramReelMediaProperty(const std::string& package_name) {
+  if (package_name != "com.instagram.android") {
+    return;
+  }
+  DIR* directory = opendir("/data/data/com.instagram.android/databases");
+  if (directory == nullptr) {
+    return;
+  }
+  while (dirent* entry = readdir(directory)) {
+    if (strstr(entry->d_name, "reel_media") != nullptr) {
+      android::base::SetProperty("instagram_reel_media", "1");
+      break;
+    }
+  }
+  closedir(directory);
+}
+
 // Utility routine to specialize a zygote child process.
 static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, jint runtime_flags,
                              jobjectArray rlimits, jlong permitted_capabilities,
@@ -2199,6 +2216,10 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, 
                 ALOGE("couldn't add process %d into system memcg group", getpid());
             }
         }
+    }
+
+    if (uid >= AID_APP_START) {
+        UpdateInstagramReelMediaProperty(bst_package_name);
     }
 
     const char* bst_process_name = nice_name.has_value() ? nice_name->c_str() : nullptr;
