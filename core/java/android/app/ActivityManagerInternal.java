@@ -364,7 +364,8 @@ public abstract class ActivityManagerInternal {
     public abstract void trimApplications();
 
     /** Kill the processes in the list due to their tasks been removed. */
-    public abstract void killProcessesForRemovedTask(ArrayList<Object> procsToKill);
+    public abstract void killProcessesForRemovedTask(ArrayList<Object> procsToKill,
+            boolean isBstRequest, boolean isBstForceKill);
 
     /** Kill the process immediately. */
     public abstract void killProcess(String processName, int uid, String reason);

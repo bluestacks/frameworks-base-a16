@@ -422,6 +422,7 @@ interface IActivityManager {
     @UnsupportedAppUsage
     void setStopUserOnSwitch(int value);
     boolean removeTask(int taskId);
+    boolean removeTaskWrapper(int taskId, boolean isBstRequest);
     boolean isIntentSenderTargetedToPackage(in IIntentSender sender);
     @UnsupportedAppUsage
     void updatePersistentConfiguration(in Configuration values);

@@ -2239,6 +2239,22 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
     }
 
+    @Override
+    public boolean removeTaskWrapper(int taskId, boolean isBstRequest) {
+        mAmInternal.enforceCallingPermission(REMOVE_TASKS, "removeTaskWrapper()");
+        synchronized (mGlobalLock) {
+            final int callingUid = Binder.getCallingUid();
+            final int callingPid = Binder.getCallingPid();
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                return mTaskSupervisor.removeTaskById(taskId, true, REMOVE_FROM_RECENTS,
+                        "bst-remove-by-pid#" + callingPid, callingUid, callingPid, isBstRequest);
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+    }
+
     boolean removeTask(int taskId, @NonNull String reason) {
         final Task task = mRootWindowContainer.anyTaskForId(taskId,
                 MATCH_ATTACHED_TASK_OR_RECENT_TASKS);

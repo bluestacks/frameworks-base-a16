@@ -151,6 +151,7 @@ interface IActivityTaskManager {
     void setFocusedTask(int taskId);
     boolean setTaskIsPerceptible(int taskId, boolean isPerceptible);
     boolean removeTask(int taskId);
+    boolean removeTaskWrapper(int taskId, boolean isBstRequest);
     void removeAllVisibleRecentTasks();
     List<ActivityManager.RunningTaskInfo> getTasks(int maxNum, boolean filterOnlyVisibleRecents,
             boolean keepIntentExtra, int displayId);

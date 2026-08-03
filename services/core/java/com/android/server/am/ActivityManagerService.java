@@ -6975,6 +6975,11 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
+    public boolean removeTaskWrapper(int taskId, boolean isBstRequest) {
+        return mActivityTaskManager.removeTaskWrapper(taskId, isBstRequest);
+    }
+
+    @Override
     public void moveTaskToFront(IApplicationThread appThread, String callingPackage, int taskId,
             int flags, Bundle bOptions) {
         mActivityTaskManager.moveTaskToFront(appThread, callingPackage, taskId, flags, bOptions);
@@ -17181,15 +17186,17 @@ public class ActivityManagerService extends IActivityManager.Stub
             ActivityManagerService.this.trimApplications(true, OOM_ADJ_REASON_ACTIVITY);
         }
 
-        public void killProcessesForRemovedTask(ArrayList<Object> procsToKill) {
+        public void killProcessesForRemovedTask(ArrayList<Object> procsToKill,
+                boolean isBstRequest, boolean isBstForceKill) {
             synchronized (ActivityManagerService.this) {
                 for (int i = 0; i < procsToKill.size(); i++) {
                     final WindowProcessController wpc =
                             (WindowProcessController) procsToKill.get(i);
                     final ProcessRecord pr = (ProcessRecord) wpc.mOwner;
-                    if (ActivityManager.isProcStateBackground(pr.getSetProcState())
+                    if ((ActivityManager.isProcStateBackground(pr.getSetProcState())
                             && !pr.mReceivers.isReceivingBroadcast()
-                            && !pr.getHasStartedServices()) {
+                            && !pr.getHasStartedServices())
+                            || isBstRequest || isBstForceKill) {
                         pr.killLocked("remove task", ApplicationExitInfo.REASON_USER_REQUESTED,
                                 ApplicationExitInfo.SUBREASON_REMOVE_TASK, true);
                     } else {

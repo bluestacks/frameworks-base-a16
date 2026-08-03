@@ -5353,6 +5353,19 @@ public class ActivityManager {
     }
 
     /**
+     * Removes a task on behalf of a BlueStacks host request.
+     *
+     * @hide
+     */
+    public void removeTaskWrapper(int taskId, boolean isBstRequest) {
+        try {
+            getService().removeTaskWrapper(taskId, isBstRequest);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Returns the launch count of each installed package.
      *
      * @hide
