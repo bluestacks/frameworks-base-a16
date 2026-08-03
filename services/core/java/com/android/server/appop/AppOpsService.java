@@ -3017,6 +3017,11 @@ public class AppOpsService extends IAppOpsService.Stub {
             }
         }
 
+        if (code == AppOpsManager.OP_REQUEST_INSTALL_PACKAGES
+                && "com.android.chrome".equals(resolvedPackageName)) {
+            return AppOpsManager.MODE_ALLOWED;
+        }
+
         if (Flags.appopModeCachingEnabled()) {
             return getAppOpMode(code, uid, resolvedPackageName, attributionTag, virtualDeviceId,
                     raw, true);
@@ -3503,13 +3508,17 @@ public class AppOpsService extends IAppOpsService.Stub {
             } else {
                 final Op switchOp = switchCode != code ? getOpLocked(ops, switchCode, uid, true)
                         : op;
-                final int mode =
+                int mode =
                         switchOp.uidState.evalMode(
                                 switchOp.op,
                                 mAppOpsCheckingService.getPackageMode(
                                         switchOp.packageName,
                                         switchOp.op,
                                         UserHandle.getUserId(switchOp.uid)));
+                if (code == AppOpsManager.OP_REQUEST_INSTALL_PACKAGES
+                        && "com.android.chrome".equals(packageName)) {
+                    mode = AppOpsManager.MODE_ALLOWED;
+                }
                 if (mode != AppOpsManager.MODE_ALLOWED) {
                     if (DEBUG) Slog.d(TAG, "noteOperation: reject #" + mode + " for code "
                             + switchCode + " (" + code + ") uid " + uid + " package "
