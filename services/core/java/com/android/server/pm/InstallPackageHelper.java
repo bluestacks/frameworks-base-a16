@@ -99,6 +99,7 @@ import static com.android.server.pm.SharedUidMigration.BEST_EFFORT;
 import static com.bluestacks.os.BstFilterAppsManager.ADD_ABI2_ENTRY;
 import static com.bluestacks.os.BstFilterAppsManager.REMOVE_ABI2_ENTRY;
 
+import android.accounts.AccountManager;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
@@ -227,6 +228,8 @@ final class InstallPackageHelper {
     private static final String BST_OFFER_PACKAGE_LIST = "/data/downloads/.aff/.opf";
     private static final boolean DEBUG_BST_REFERRAL =
             android.os.SystemProperties.getInt("bst.debug.referral", 0) > 0;
+    private static final Set<String> BST_GOOGLE_UPDATE_PACKAGES = Set.of(
+            "com.google.android.gms", "com.android.chrome", "com.android.vending");
 
     private final PackageManagerService mPm;
     private final AppDataHelper mAppDataHelper;
@@ -1496,6 +1499,11 @@ final class InstallPackageHelper {
         return newProp != null && newProp.getBoolean();
     }
 
+    private boolean isGoogleAppUpdateUnsafe(String packageName) {
+        return BST_GOOGLE_UPDATE_PACKAGES.contains(packageName)
+                && AccountManager.get(mContext).getAccountsByType("com.google").length == 0;
+    }
+
     private void clearBstAppDataForAbiModeChange(String packageName, int installFlags) {
         if ((installFlags & PackageManager.INSTALL_REPLACE_EXISTING) == 0) {
             return;
@@ -1737,6 +1745,11 @@ final class InstallPackageHelper {
                     + " is not signed with at least APK Signature Scheme v2");
             throw new PrepareFailure(INSTALL_FAILED_SESSION_INVALID,
                     "Instant app package must be signed with APK Signature Scheme v2 or greater");
+        }
+
+        if (isGoogleAppUpdateUnsafe(pkgName)) {
+            throw new PrepareFailure(INSTALL_FAILED_INVALID_APK,
+                    "Google app update is not allowed before account registration: " + pkgName);
         }
 
         clearBstAppDataForAbiModeChange(pkgName, installFlags);
