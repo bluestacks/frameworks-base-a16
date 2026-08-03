@@ -54,6 +54,7 @@ import android.app.IApplicationThread;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.os.Binder;
@@ -66,6 +67,7 @@ import android.util.Pair;
 import android.util.Slog;
 import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
+import android.view.WindowManagerGlobal;
 import android.window.DesktopExperienceFlags;
 import android.window.PictureInPictureSurfaceTransaction;
 import android.window.TaskSnapshot;
@@ -81,6 +83,8 @@ import androidx.annotation.NonNull;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.protolog.ProtoLog;
+import com.bluestacks.os.BstFilterAppsManager;
+import com.bluestacks.os.BstHostCallManager;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.bubbles.BubbleController;
 import com.android.wm.shell.common.DisplayController;
@@ -458,6 +462,8 @@ public class RecentsTransitionHandler implements Transitions.TransitionHandler,
         private boolean mKeyguardLocked = false;
         private boolean mWillFinishToHome = false;
         private Transitions.TransitionHandler mTakeoverHandler = null;
+
+        private int mBackupRotation = -1;
 
         /** The animation is idle, waiting for the user to choose a task to switch to. */
         private static final int STATE_NORMAL = 0;
@@ -967,6 +973,7 @@ public class RecentsTransitionHandler implements Transitions.TransitionHandler,
                 for (int i = 0; i < mStateListeners.size(); i++) {
                     mStateListeners.get(i).onTransitionStateChanged(TRANSITION_STATE_ANIMATING);
                 }
+                syncHostOrientationForStart();
             } catch (RemoteException e) {
                 Slog.e(TAG, "Error starting recents animation", e);
                 cancel("onAnimationStart() failed");
@@ -1580,6 +1587,8 @@ public class RecentsTransitionHandler implements Transitions.TransitionHandler,
                     mInstanceId, toHome, sendUserLeaveHint, mWillFinishToHome, mState,
                     mPausingTasks != null, reason);
 
+            restoreHostOrientationIfNeeded(returningToApp);
+
             final SurfaceControl.Transaction t = mFinishTransactionSupplier != null
                     ? mFinishTransactionSupplier.get()
                     : new SurfaceControl.Transaction();
@@ -1772,6 +1781,64 @@ public class RecentsTransitionHandler implements Transitions.TransitionHandler,
                 mPendingFinishTransaction = t;
                 onFinishInner(null /* wct */);
             }
+        }
+
+        private void syncHostOrientationForStart() {
+            try {
+                final int displayRotation = WindowManagerGlobal.getWindowManagerService()
+                        .getDefaultDisplayRotation();
+                final int userRotation = WindowManagerGlobal.getWindowManagerService()
+                        .getDisplayUserRotation(mDisplayId);
+                mBackupRotation = -1;
+                if (displayRotation != userRotation) {
+                    mBackupRotation = displayRotation;
+                    sendOrientationToHostAsync(userRotation);
+                }
+            } catch (RemoteException e) {
+                Slog.w(TAG, "Unable to read display rotation for recents", e);
+            }
+        }
+
+        private void restoreHostOrientationIfNeeded(boolean returningToApp) {
+            if (!returningToApp || mBackupRotation < 0) {
+                return;
+            }
+
+            if (mPausingTasks != null && mPausingTasks.size() == 1) {
+                sendOrientationToHostAsync(mBackupRotation);
+            } else if (mPausingTasks != null && !mPausingTasks.isEmpty()) {
+                final ActivityManager.RunningTaskInfo taskInfo = mPausingTasks.get(0).mTaskInfo;
+                int orientation = taskInfo.configuration.orientation
+                        == Configuration.ORIENTATION_PORTRAIT ? 1 : 0;
+                final String packageName = taskInfo.topActivity != null
+                        ? taskInfo.topActivity.getPackageName() : null;
+                final BstFilterAppsManager filterApps = mRecentTasksController.getContext()
+                        .getSystemService(BstFilterAppsManager.class);
+                if (filterApps != null && packageName != null) {
+                    if (filterApps.isSmallScreenApp(packageName)) {
+                        orientation = 1;
+                    } else if (filterApps.isPortraitDisabled(packageName)) {
+                        orientation = 0;
+                    }
+                }
+                sendOrientationToHostAsync(orientation);
+            }
+            mBackupRotation = -1;
+        }
+
+        private void sendOrientationToHostAsync(int orientation) {
+            final Context context = mRecentTasksController.getContext();
+            mExecutor.execute(() -> {
+                try {
+                    final BstHostCallManager hostCall = (BstHostCallManager)
+                            context.getSystemService(Context.BST_HOST_CALL);
+                    if (hostCall != null) {
+                        hostCall.onOrientationChange(orientation);
+                    }
+                } catch (Exception e) {
+                    Slog.w(TAG, "Unable to send recents orientation to host", e);
+                }
+            });
         }
 
         /**
