@@ -3007,6 +3007,10 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         }
 
         if ("android.hardware.nowgg".equalsIgnoreCase(name)) {
+            if ("gg.now.accounts".equalsIgnoreCase(callingPackage)
+                    || "gg.now.billing.service2".equalsIgnoreCase(callingPackage)) {
+                return true;
+            }
             if (BST_DEBUG) {
                 Log.d(TAG, "Package " + callingPackage + " queried for feature " + name);
             }
