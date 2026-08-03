@@ -2577,7 +2577,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         // Update the configuration based on available input devices, lid switch,
         // and platform configuration.
         config.touchscreen = Configuration.TOUCHSCREEN_NOTOUCH;
-        config.keyboard = Configuration.KEYBOARD_NOKEYS;
+        final String topPackage = android.os.SystemProperties.get(
+                "bst.config.top_package_name", null);
+        if (mWmService.mBstFilterApps == null
+                || !mWmService.mBstFilterApps.areInputDevicesExposed(topPackage)) {
+            config.keyboard = Configuration.KEYBOARD_NOKEYS;
+        }
         config.navigation = Configuration.NAVIGATION_NONAV;
 
         int keyboardPresence = 0;
@@ -2618,7 +2623,22 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             }
 
             if (device.getKeyboardType() == InputDevice.KEYBOARD_TYPE_ALPHABETIC) {
-                config.keyboard = Configuration.KEYBOARD_QWERTY;
+                final String packageName = android.os.SystemProperties.get(
+                        "bst.config.top_package_name", null);
+                if (mWmService.mBstFilterApps != null
+                        && mWmService.mBstFilterApps.isHardKeyBoard(packageName)) {
+                    if ("com.roblox.client".equals(packageName)) {
+                        final String mouseAction = android.os.SystemProperties.get(
+                                "bst.config.last_mouse_action", "");
+                        config.keyboard = "enableNative".equals(mouseAction)
+                                ? Configuration.KEYBOARD_QWERTY
+                                : Configuration.KEYBOARD_NOKEYS;
+                    } else {
+                        config.keyboard = Configuration.KEYBOARD_QWERTY;
+                    }
+                } else {
+                    config.keyboard = Configuration.KEYBOARD_NOKEYS;
+                }
                 keyboardPresence |= presenceFlag;
             }
         }
