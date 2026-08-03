@@ -103,6 +103,7 @@ import android.text.TextUtils;
 import android.text.style.SuggestionSpan;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.BstUtils;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.PrintWriterPrinter;
@@ -882,6 +883,24 @@ class BroadcastController {
                 Log.w(TAG_BST_GPSTATS, "Package name is null for " + action);
             }
             return;
+        }
+
+        if ("com.android.launcher.action.ACTION_PACKAGE_ENQUEUED".equals(action)) {
+            try {
+                if (!BstUtils.thirdPartyReferred(packageName)) {
+                    final Intent affiliateIntent = new Intent();
+                    affiliateIntent.setPackage("com.bluestacks.home");
+                    affiliateIntent.setAction("com.bluestacks.home.AFFILIATE_HANDLER_HTML");
+                    affiliateIntent.putExtra("app_pkg", packageName);
+                    affiliateIntent.putExtra("referrer_only", "true");
+                    affiliateIntent.putExtra("WINDOWS_SOURCE", "packageEnqueued");
+                    mService.mServices.startServiceLocked(null, affiliateIntent, null, 0,
+                            SYSTEM_UID, false, "android", null, userId,
+                            BackgroundStartPrivileges.NONE);
+                }
+            } catch (TransactionTooLargeException | RuntimeException e) {
+                Slog.w(TAG_BST_GPSTATS, "Unable to request affiliate referral", e);
+            }
         }
 
         final String previousState = mBstGpStatsPreviousState.get(packageName);

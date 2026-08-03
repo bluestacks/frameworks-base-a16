@@ -40,7 +40,7 @@ final class InstallArgs {
     final int mInstallFlags;
     final int mDevelopmentInstallFlags;
     @NonNull
-    final InstallSource mInstallSource;
+    InstallSource mInstallSource;
     final String mVolumeUuid;
     final UserHandle mUser;
     final String mAbiOverride;

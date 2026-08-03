@@ -149,6 +149,7 @@ import android.system.Os;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.BstUtils;
 import android.util.EventLog;
 import android.util.ExceptionUtils;
 import android.util.IntArray;
@@ -200,6 +201,7 @@ import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -208,11 +210,18 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 
+import org.json.JSONObject;
+
 
 final class InstallPackageHelper {
     // One minute over PM WATCHDOG_TIMEOUT
     private static final long WAKELOCK_TIMEOUT_MS = WATCHDOG_TIMEOUT + 1000 * 60;
     private static final String INSTALLER_WAKE_LOCK_TAG = "installer:packages";
+    private static final String TAG_BST_REFERRAL = "PackageManager-Affiliate";
+    private static final String BST_APP_REFERRAL_LIST = "/data/downloads/.aff/.fl";
+    private static final String BST_OFFER_PACKAGE_LIST = "/data/downloads/.aff/.opf";
+    private static final boolean DEBUG_BST_REFERRAL =
+            android.os.SystemProperties.getInt("bst.debug.referral", 0) > 0;
 
     private final PackageManagerService mPm;
     private final AppDataHelper mAppDataHelper;
@@ -1482,6 +1491,57 @@ final class InstallPackageHelper {
         return newProp != null && newProp.getBoolean();
     }
 
+    @SuppressWarnings("unchecked")
+    private void applyBstAffiliateInstallSource(InstallRequest request, String packageName) {
+        try {
+            HashMap<String, String> referrals = new HashMap<>();
+            referrals = (HashMap<String, String>) BstUtils.loadListFromFile(
+                    BST_APP_REFERRAL_LIST, referrals);
+
+            final String referralData = referrals.get(packageName);
+            boolean offerPresent = referralData != null;
+            int delaySeconds = 0;
+            if (referralData != null) {
+                final JSONObject referral = new JSONObject(referralData);
+                final long clickTime = referral.optLong("mod_referrer_click_timestamp", 0L);
+                final long elapsed = System.currentTimeMillis() / 1000 - clickTime;
+                if (elapsed < 10) {
+                    delaySeconds = (int) Math.min(10, Math.max(0, 10 - elapsed));
+                }
+            } else {
+                HashSet<String> offerPackages = new HashSet<>();
+                offerPackages = (HashSet<String>) BstUtils.loadListFromFile(
+                        BST_OFFER_PACKAGE_LIST, offerPackages);
+                offerPresent = offerPackages.contains(packageName);
+            }
+
+            if (DEBUG_BST_REFERRAL) {
+                Log.d(TAG_BST_REFERRAL, "package=" + packageName + " offer=" + offerPresent
+                        + " delaySeconds=" + delaySeconds);
+            }
+            if (!offerPresent) {
+                return;
+            }
+
+            final InstallSource installSource = request.getInstallSource();
+            if (installSource != null) {
+                final int installerUid = mPm.snapshotComputer().getPackageUid(
+                        "com.android.vending", PackageManager.MATCH_UNINSTALLED_PACKAGES,
+                        request.getUserId());
+                request.setInstallSource(installSource.setInstallerPackage(
+                        "com.android.vending", installerUid));
+            }
+            if (delaySeconds > 0) {
+                Thread.sleep(delaySeconds * 1000L);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            Slog.w(TAG_BST_REFERRAL, "Interrupted while delaying affiliate install", e);
+        } catch (Exception e) {
+            Slog.w(TAG_BST_REFERRAL, "Unable to apply affiliate install source", e);
+        }
+    }
+
     private void preparePackage(InstallRequest request) throws PrepareFailure {
         final int[] allUsers =  mPm.mUserManager.getUserIds();
         final int installFlags = request.getInstallFlags();
@@ -1635,6 +1695,9 @@ final class InstallPackageHelper {
             throw new PrepareFailure(INSTALL_FAILED_SESSION_INVALID,
                     "Instant app package must be signed with APK Signature Scheme v2 or greater");
         }
+
+        // Keep referral file I/O and delay outside the package-manager global lock.
+        applyBstAffiliateInstallSource(request, pkgName);
 
         boolean systemApp = false;
         boolean replace = false;

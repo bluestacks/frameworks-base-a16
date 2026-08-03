@@ -406,6 +406,13 @@ final class InstallRequest {
         return mInstallArgs == null ? null : mInstallArgs.mInstallSource;
     }
 
+    public void setInstallSource(@NonNull InstallSource installSource) {
+        if (mInstallArgs == null) {
+            throw new IllegalStateException("No install source for an existing-package request");
+        }
+        mInstallArgs.mInstallSource = installSource;
+    }
+
     @Nullable
     public String getInstallerPackageName() {
         return (mInstallArgs != null && mInstallArgs.mInstallSource != null)
