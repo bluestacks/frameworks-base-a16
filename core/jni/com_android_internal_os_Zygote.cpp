@@ -2385,6 +2385,19 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, 
         SetThreadName("system_server");
     }
 
+    const bool bst_debuggable =
+            GetBoolProperty("bst.config.ro.debuggable", false)
+            || (nice_name_ptr != nullptr
+                && strncmp(nice_name_ptr, "com.bluestacks", strlen("com.bluestacks")) == 0)
+            || (nice_name_ptr != nullptr
+                && strncmp(nice_name_ptr, "com.google.android", strlen("com.google.android")) == 0)
+            || (nice_name_ptr != nullptr
+                && strncmp(nice_name_ptr, "com.android", strlen("com.android")) == 0)
+            || uid < AID_APP_START;
+    if (bst_debuggable) {
+        runtime_flags |= RuntimeFlags::DEBUG_ENABLE_JDWP;
+    }
+
     // Unset the SIGCHLD handler, but keep ignoring SIGHUP (rationale in SetSignalHandlers).
     UnsetChldSignalHandler();
 
