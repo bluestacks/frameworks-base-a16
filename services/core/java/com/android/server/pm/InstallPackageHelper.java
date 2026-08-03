@@ -3966,6 +3966,12 @@ final class InstallPackageHelper {
         }
     }
 
+    private static boolean isBstTemporaryDownload(File file) {
+        final String path = file.getAbsolutePath();
+        return "/data/downloads/.tmp".equals(path)
+                || path.startsWith("/data/downloads/.tmp/");
+    }
+
     @GuardedBy({"mPm.mInstallLock", "mPm.mLock"})
     private int scanDirectoryForFilesToParse(ParallelPackageParser parallelPackageParser,
             ScanParams scanParams) {
@@ -3988,6 +3994,12 @@ final class InstallPackageHelper {
                     && !PackageInstallerService.isStageName(file.getName());
             if (!isPackage) {
                 // Ignore entries which are not packages
+                continue;
+            }
+            if (isBstTemporaryDownload(file)) {
+                if (DEBUG_PACKAGE_SCANNING) {
+                    Log.d(TAG, "Skipping temporary download " + file.getAbsolutePath());
+                }
                 continue;
             }
             if ((scanParams.scanFlags & SCAN_DROP_CACHE) != 0) {
@@ -4027,6 +4039,12 @@ final class InstallPackageHelper {
                     && !PackageInstallerService.isStageName(file.getName());
             if (!isPackage) {
                 // Ignore entries which are not packages
+                continue;
+            }
+            if (isBstTemporaryDownload(file)) {
+                if (DEBUG_PACKAGE_SCANNING) {
+                    Log.d(TAG, "Skipping temporary download " + file.getAbsolutePath());
+                }
                 continue;
             }
             if ((scanParams.scanFlags & SCAN_DROP_CACHE) != 0) {
