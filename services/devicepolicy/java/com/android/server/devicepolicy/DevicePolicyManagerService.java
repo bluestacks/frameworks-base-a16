@@ -6524,6 +6524,11 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
 
     @Override
     public void lockNow(int flags, String callerPackageName, boolean parent) {
+        // Third-party lock-screen apps can deadlock the guest display path.
+        if (SystemProperties.getBoolean("bst.config.disable_lock_now", true)) {
+            return;
+        }
+
         CallerIdentity caller;
         if (Flags.lockNowCoexistence()) {
             caller = getCallerIdentity(callerPackageName);
