@@ -78,6 +78,7 @@ import android.os.IUserManager;
 import android.os.Looper;
 import android.os.Message;
 import android.os.Parcel;
+import android.os.PowerManager;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -1240,6 +1241,12 @@ public class ClipboardService extends SystemService {
     private boolean isDeviceLocked(@UserIdInt int userId, int deviceId) {
         final long token = Binder.clearCallingIdentity();
         try {
+            final boolean lockscreenDisabled = Settings.Secure.getInt(
+                    getContext().getContentResolver(), "lockscreen.disabled", 0) == 1;
+            final PowerManager powerManager = getContext().getSystemService(PowerManager.class);
+            if (lockscreenDisabled && powerManager != null && powerManager.isInteractive()) {
+                return false;
+            }
             final KeyguardManager keyguardManager = getContext().getSystemService(
                     KeyguardManager.class);
             return keyguardManager != null && keyguardManager.isDeviceLocked(userId, deviceId);
