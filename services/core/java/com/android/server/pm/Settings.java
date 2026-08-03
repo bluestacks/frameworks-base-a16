@@ -6230,7 +6230,8 @@ public final class Settings implements Watchable, Snappable, ResilientAtomicFile
 
         public boolean isPermissionUpgradeNeeded(int userId) {
             synchronized (mLock) {
-                return mPermissionUpgradeNeeded.get(userId, true);
+                return mPermissionUpgradeNeeded.get(userId, true)
+                        || PackageManagerService.bstIsFirstBootAfterUpgrade();
             }
         }
 

@@ -376,6 +376,9 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
     private static final boolean BST_DEBUG =
             SystemProperties.getInt("bst.debug.pm", 0) != 0;
+    private static final File BST_FIRST_BOOT_AFTER_UPGRADE_FILE =
+            new File("/data/downloads/.first_boot_after_upgrade_for_pm");
+    private static boolean sBstFirstBootAfterUpgrade;
 
     static final int SCAN_NO_DEX = 1 << 0;
     static final int SCAN_UPDATE_SIGNATURE = 1 << 1;
@@ -2007,6 +2010,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         mMetrics = injector.getDisplayMetrics();
         mInstaller = injector.getInstaller();
         mFreeStorageHelper = new FreeStorageHelper(this);
+        sBstFirstBootAfterUpgrade = BST_FIRST_BOOT_AFTER_UPGRADE_FILE.exists();
 
         // Create sub-components that provide services / data. Order here is important.
         t.traceBegin("createSubComponents");
@@ -2606,6 +2610,10 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     public boolean isFirstBoot() {
         // allow instant applications
         return mFirstBoot;
+    }
+
+    public static boolean bstIsFirstBootAfterUpgrade() {
+        return sBstFirstBootAfterUpgrade;
     }
 
     public boolean isDeviceUpgrading() {
@@ -4545,6 +4553,14 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
         // Prune unused static shared libraries which have been cached a period of time
         schedulePruneUnusedStaticSharedLibraries(false /* delay */);
+
+        if (BST_FIRST_BOOT_AFTER_UPGRADE_FILE.exists()) {
+            final boolean deleted = BST_FIRST_BOOT_AFTER_UPGRADE_FILE.delete();
+            if (BST_DEBUG) {
+                Slog.w(TAG, "Deleted " + BST_FIRST_BOOT_AFTER_UPGRADE_FILE.getName()
+                        + ": " + deleted);
+            }
+        }
 
         DexUseManagerLocal dexUseManager = DexOptHelper.getDexUseManagerLocal();
         if (dexUseManager != null) {
