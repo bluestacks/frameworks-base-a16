@@ -128,6 +128,12 @@ public final class Formatter {
         return formatFileSize(context, sizeBytes, FLAG_SI_UNITS | FLAG_SHORTER);
     }
 
+    /** @hide */
+    public static String bstFormatShortFileSizeIecUnits(
+            @Nullable Context context, long sizeBytes) {
+        return formatFileSize(context, sizeBytes, FLAG_IEC_UNITS | FLAG_SHORTER);
+    }
+
     private static String getByteSuffixOverride(@NonNull Resources res) {
         return res.getString(com.android.internal.R.string.byteShort);
     }

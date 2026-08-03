@@ -140,6 +140,8 @@ import java.util.regex.Pattern;
 public class StorageManager {
     private static final String TAG = "StorageManager";
     private static final boolean LOCAL_LOGV = Log.isLoggable(TAG, Log.VERBOSE);
+    private static final String BST_PRIMARY_STORAGE_SECTORS_PATH = "/sys/block/sdb/size";
+    private static final long BST_STORAGE_SECTOR_SIZE_BYTES = 512L;
 
     /** @hide */
     public static final String PROP_PRIMARY_PHYSICAL = "ro.vold.primary_physical";
@@ -1394,13 +1396,26 @@ public class StorageManager {
 
     /** @hide */
     public static Pair<String, Long> getPrimaryStoragePathAndSize() {
-        return Pair.create(null,
-                FileUtils.roundStorageSize(Environment.getDataDirectory().getTotalSpace()
-                        + Environment.getRootDirectory().getTotalSpace()));
+        return Pair.create(null, getBstPrimaryStorageSize());
     }
 
     /** @hide */
     public long getPrimaryStorageSize() {
+        return getBstPrimaryStorageSize();
+    }
+
+    private static long getBstPrimaryStorageSize() {
+        try {
+            final String sectors = FileUtils.readTextFile(
+                    new File(BST_PRIMARY_STORAGE_SECTORS_PATH), 64, null).trim();
+            final long sectorCount = Long.parseLong(sectors);
+            if (sectorCount > 0) {
+                return Math.multiplyExact(sectorCount, BST_STORAGE_SECTOR_SIZE_BYTES);
+            }
+        } catch (IOException | NumberFormatException | ArithmeticException e) {
+            Slog.w(TAG, "Could not read " + BST_PRIMARY_STORAGE_SECTORS_PATH, e);
+        }
+
         return FileUtils.roundStorageSize(Environment.getDataDirectory().getTotalSpace()
                 + Environment.getRootDirectory().getTotalSpace());
     }
