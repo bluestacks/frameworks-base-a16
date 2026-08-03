@@ -309,6 +309,17 @@ public class Instrumentation {
     }
 
     private boolean fwdIntentToHost(Context context, Intent intent) {
+        if (Process.myUid() >= Process.FIRST_APPLICATION_UID
+                && "com.onestore.component.iap.ACTION_PURCHASE_RESERVATION".equals(
+                        intent.getAction())) {
+            final String packageName = context.getBasePackageName();
+            final BstFilterAppsManager filterApps = BstFilterAppsManager.getInstance();
+            if (packageName != null && filterApps != null
+                    && filterApps.isOneStorePay(packageName)) {
+                return false;
+            }
+        }
+
         if (!intent.getBooleanExtra("openOnHostBrowser", false)) {
             return false;
         }
