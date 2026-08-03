@@ -942,6 +942,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
     private static final String BST_BLACKLISTED_PACKAGE_LIST_PATH =
             "/data/downloads/.tmp/.blc";
+    private static final String BST_DEFAULT_APP_PERMISSIONS_PATH =
+            "/data/downloads/.dp/apps.xml";
 
     // When the service constructor finished plus a delay (used for broadcast delay computation)
     private long mServiceStartWithDelay;
@@ -4529,6 +4531,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             mPermissionManager.setDefaultPermissionGrantFingerprint(Build.FINGERPRINT, userId);
         }
         if (grantPermissionsUserIds == EMPTY_INT_ARRAY) {
+            mLegacyPermissionManager.assignPermissionsToBstApps(
+                    BST_DEFAULT_APP_PERMISSIONS_PATH);
             // If we did not grant default permissions, we preload from this the
             // default permission exceptions lazily to ensure we don't hit the
             // disk on a new user creation.
