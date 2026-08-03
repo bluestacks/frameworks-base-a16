@@ -3924,7 +3924,18 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
         final int targetSize = settings.size();
         for (int i = 0; i < targetSize; i++) {
+            final String packageName = settings.get(i).getPackageName();
             final int newState = settings.get(i).getEnabledState();
+            if (packageName.startsWith("com.bluestacks")
+                    || "com.uncube.account".equalsIgnoreCase(packageName)
+                    || "com.uncube.launcher3".equalsIgnoreCase(packageName)) {
+                if (newState == COMPONENT_ENABLED_STATE_DISABLED
+                        || newState == COMPONENT_ENABLED_STATE_DISABLED_USER
+                        || newState == COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED) {
+                    Slog.d(TAG, "Refusing to disable protected BlueStacks package " + packageName);
+                    return;
+                }
+            }
             if (!(newState == COMPONENT_ENABLED_STATE_DEFAULT
                     || newState == COMPONENT_ENABLED_STATE_ENABLED
                     || newState == COMPONENT_ENABLED_STATE_DISABLED

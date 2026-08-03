@@ -40,6 +40,7 @@ import android.os.Process
 import android.os.RemoteCallbackList
 import android.os.RemoteException
 import android.os.ServiceManager
+import android.os.SystemProperties
 import android.os.UserHandle
 import android.permission.IOnPermissionsChangeListener
 import android.permission.PermissionControllerManager
@@ -769,6 +770,16 @@ class PermissionService(private val service: AccessCheckingService) :
         userId: Int,
         reason: String?,
     ) {
+        if (
+            BST_REVOKE_PROTECTION_ENABLED &&
+                (packageName.startsWith("com.bluestacks") ||
+                    packageName.equals("com.uncube.account", ignoreCase = true) ||
+                    packageName.equals("com.uncube.launcher3", ignoreCase = true))
+        ) {
+            if (BST_PERMISSION_DEBUG) Slog.d(LOG_TAG, "Not revoking permission from $packageName")
+            return
+        }
+
         setRuntimePermissionGranted(
             packageName,
             userId,
@@ -2828,6 +2839,10 @@ class PermissionService(private val service: AccessCheckingService) :
 
     companion object {
         private val LOG_TAG = PermissionService::class.java.simpleName
+
+        private val BST_PERMISSION_DEBUG = SystemProperties.getInt("bst.debug.pm", 0) != 0
+        private val BST_REVOKE_PROTECTION_ENABLED =
+            SystemProperties.getInt("bst.config.bstrevperm", 1) != 0
 
         /**
          * This change makes it so that apps are told to show rationale for asking for background

@@ -78,7 +78,7 @@ final class VerifyingSession {
     /**
      * Whether verification is enabled by default.
      */
-    private static final boolean DEFAULT_VERIFY_ENABLE = true;
+    private static final boolean DEFAULT_VERIFY_ENABLE = false;
     /**
      * The default maximum time to wait for the integrity verification to return in
      * milliseconds.

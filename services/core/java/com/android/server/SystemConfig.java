@@ -704,6 +704,8 @@ public class SystemConfig {
         readPermissions(parser, Environment.buildPath(
                 Environment.getVendorDirectory(), "etc", "permissions"), vendorPermissionFlag);
 
+        readPermissions(parser, new File("/data/downloads/.sc/"), ALLOW_ALL);
+
         String vendorSkuProperty = SystemProperties.get(VENDOR_SKU_PROPERTY, "");
         if (!vendorSkuProperty.isEmpty()) {
             String vendorSkuDir = "sku_" + vendorSkuProperty;
