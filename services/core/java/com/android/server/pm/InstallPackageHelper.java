@@ -1504,6 +1504,12 @@ final class InstallPackageHelper {
                 && AccountManager.get(mContext).getAccountsByType("com.google").length == 0;
     }
 
+    private boolean isBstBlacklisted(String packageName, String versionName) {
+        final BstFilterAppsManager filterApps = (BstFilterAppsManager)
+                mContext.getSystemService(Context.BST_FILTER_APPS);
+        return filterApps != null && filterApps.isBlackListed(packageName, versionName);
+    }
+
     private void clearBstAppDataForAbiModeChange(String packageName, int installFlags) {
         if ((installFlags & PackageManager.INSTALL_REPLACE_EXISTING) == 0) {
             return;
@@ -1747,6 +1753,10 @@ final class InstallPackageHelper {
                     "Instant app package must be signed with APK Signature Scheme v2 or greater");
         }
 
+        if (isBstBlacklisted(pkgName, parsedPackage.getVersionName())) {
+            throw new PrepareFailure(INSTALL_FAILED_INVALID_APK,
+                    "Package is blocked by the BlueStacks blacklist: " + pkgName);
+        }
         if (isGoogleAppUpdateUnsafe(pkgName)) {
             throw new PrepareFailure(INSTALL_FAILED_INVALID_APK,
                     "Google app update is not allowed before account registration: " + pkgName);
