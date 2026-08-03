@@ -5951,6 +5951,10 @@ public class WindowManagerService extends IWindowManager.Stub
             }
         } catch (IllegalArgumentException e) {
         }
+        // App-player ignores accidental safe-mode key states unless explicitly debugging them.
+        if (SystemProperties.getInt("bst.debug.safemode", 0) <= 0) {
+            mSafeMode = false;
+        }
         if (mSafeMode) {
             ProtoLog.i(WM_ERROR, "SAFE MODE ENABLED (menu=%d s=%d dpad=%d"
                     + " trackball=%d)", menuState, sState, dpadState, trackballState);
