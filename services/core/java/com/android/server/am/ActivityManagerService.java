@@ -5340,6 +5340,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             mHandler.sendMessageDelayed(nmsg, mConstants.POWER_CHECK_INTERVAL);
             // Tell anyone interested that we are done booting!
             SystemProperties.set("sys.boot_completed", "1");
+            SystemProperties.set("bst.config.boot_completed", "1");
             SystemProperties.set("dev.bootcomplete", "1");
 
             // Start PSI monitoring in LMKD if it was skipped earlier.

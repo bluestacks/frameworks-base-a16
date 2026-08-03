@@ -6931,6 +6931,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             synchronized (mGlobalLock) {
                 updateEventDispatchingLocked(booted);
             }
+            SystemProperties.set("bst.config.screen_enabled", "1");
         }
 
         @Override
