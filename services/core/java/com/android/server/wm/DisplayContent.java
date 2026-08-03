@@ -28,8 +28,20 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_USER;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_NOSENSOR;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.content.res.Configuration.ORIENTATION_UNDEFINED;
@@ -3011,6 +3023,50 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
 
         return orientation;
+    }
+
+    /** Applies the BlueStacks per-app orientation policy to an app request. */
+    @ScreenOrientation
+    int getBstOrientation(@ScreenOrientation int requestedOrientation) {
+        final String topPackage = android.os.SystemProperties.get(
+                "bst.config.top_package_name", "");
+        if ("com.foxnextgames.m3".equals(topPackage)) {
+            return SCREEN_ORIENTATION_UNSPECIFIED;
+        }
+
+        final String topActivity = android.os.SystemProperties.get(
+                "bst.config.top_activity_name", "");
+        if ("com.whatsapp/.status.playback.StatusReplyActivity".equals(topActivity)) {
+            return SCREEN_ORIENTATION_PORTRAIT;
+        }
+
+        if (mWmService.mBstFilterApps != null) {
+            if (mWmService.mBstFilterApps.isSmallScreenApp(topPackage)) {
+                return SCREEN_ORIENTATION_PORTRAIT;
+            }
+            if (mWmService.mBstFilterApps.isPortraitDisabled(topPackage)) {
+                return SCREEN_ORIENTATION_LANDSCAPE;
+            }
+        }
+
+        switch (requestedOrientation) {
+            case SCREEN_ORIENTATION_SENSOR_LANDSCAPE:
+            case SCREEN_ORIENTATION_USER_LANDSCAPE:
+            case SCREEN_ORIENTATION_REVERSE_LANDSCAPE:
+                return SCREEN_ORIENTATION_LANDSCAPE;
+            case SCREEN_ORIENTATION_SENSOR_PORTRAIT:
+            case SCREEN_ORIENTATION_USER_PORTRAIT:
+            case SCREEN_ORIENTATION_REVERSE_PORTRAIT:
+                return SCREEN_ORIENTATION_PORTRAIT;
+            case SCREEN_ORIENTATION_SENSOR:
+            case SCREEN_ORIENTATION_FULL_SENSOR:
+            case SCREEN_ORIENTATION_FULL_USER:
+            case SCREEN_ORIENTATION_USER:
+            case SCREEN_ORIENTATION_NOSENSOR:
+                return SCREEN_ORIENTATION_UNSPECIFIED;
+            default:
+                return requestedOrientation;
+        }
     }
 
     void updateDisplayInfo(@NonNull DisplayInfo newDisplayInfo) {

@@ -30,6 +30,7 @@ import android.os.Trace;
 import android.util.Slog;
 import android.util.TimeUtils;
 import android.view.Choreographer;
+import android.view.Surface;
 import android.view.SurfaceControl;
 
 import com.android.internal.protolog.ProtoLog;
@@ -115,6 +116,9 @@ public class WindowAnimator {
                     () -> mChoreographer = Choreographer.getSfInstance(), 0 /* timeout */);
         }
         mExecutor = new HandlerExecutor(service.mAnimationHandler);
+
+        // Re-synchronize host orientation after a system_server restart.
+        mService.sendOrientationToHostAsync(Surface.ROTATION_0);
 
         mAnimationFrameCallback =
                 frameTimeNs -> {

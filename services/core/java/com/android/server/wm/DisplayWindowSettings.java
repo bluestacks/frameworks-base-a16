@@ -394,7 +394,7 @@ class DisplayWindowSettings {
         final int userRotation = settings.mUserRotation != null
                 ? settings.mUserRotation : Surface.ROTATION_0;
         final int mFixedToUserRotation = settings.mFixedToUserRotation != null
-                ? settings.mFixedToUserRotation : IWindowManager.FIXED_TO_USER_ROTATION_DEFAULT;
+                ? settings.mFixedToUserRotation : IWindowManager.FIXED_TO_USER_ROTATION_DISABLED;
         dc.getDisplayRotation().restoreSettings(userRotationMode, userRotation,
                 mFixedToUserRotation);
 

@@ -36,6 +36,7 @@ import static com.android.server.wm.ActivityRecord.State.RESUMED;
 import static com.android.server.wm.ActivityTaskManagerService.TAG_ROOT_TASK;
 import static com.android.server.wm.DisplayContent.alwaysCreateRootTask;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ROOT_TASK;
+import static com.android.server.wm.WindowManagerDebugConfig.BST_DEBUG_ORIENTATION;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
 import android.annotation.NonNull;
@@ -611,7 +612,14 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
     @Override
     @ScreenOrientation
     int getOrientation(@ScreenOrientation int candidate) {
-        final int orientation = super.getOrientation(candidate);
+        int orientation = super.getOrientation(candidate);
+        if (BST_DEBUG_ORIENTATION) {
+            Slog.d(TAG_WM, "App requested orientation: " + orientation);
+        }
+        orientation = mDisplayContent.getBstOrientation(orientation);
+        if (BST_DEBUG_ORIENTATION) {
+            Slog.d(TAG_WM, "Changing requested orientation to: " + orientation);
+        }
         if (!canSpecifyOrientation(orientation)) {
             mLastOrientationSource = null;
             // We only respect orientation of the focused TDA, which can be a child of this TDA.
