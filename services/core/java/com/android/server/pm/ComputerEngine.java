@@ -161,6 +161,7 @@ import com.android.server.utils.WatchedLongSparseArray;
 import com.android.server.utils.WatchedSparseBooleanArray;
 import com.android.server.utils.WatchedSparseIntArray;
 import com.android.server.wm.ActivityTaskManagerInternal;
+import com.bluestacks.os.BstFilterAppsManager;
 
 import libcore.util.EmptyArray;
 
@@ -908,6 +909,9 @@ public class ComputerEngine implements Computer {
 
     protected ActivityInfo getActivityInfoInternalBody(ComponentName component,
             @PackageManager.ResolveInfoFlagsBits long flags, int filterCallingUid, int userId) {
+        if (shouldHideBstActivityInfo(component.getPackageName(), filterCallingUid)) {
+            return null;
+        }
         ParsedActivity a = mComponentResolver.getActivity(component);
 
         // Allow to match activities of quarantined packages.
@@ -1006,6 +1010,9 @@ public class ComputerEngine implements Computer {
     protected ApplicationInfo getApplicationInfoInternalBody(String packageName,
             @PackageManager.ApplicationInfoFlagsBits long flags,
             int filterCallingUid, int userId) {
+        if (shouldHideBstPackage(packageName, filterCallingUid)) {
+            return null;
+        }
         // writer
         // Normalize package name to handle renamed packages and static libs
         packageName = resolveInternalPackageName(packageName,
@@ -1677,6 +1684,9 @@ public class ComputerEngine implements Computer {
 
     public PackageStateInternal getPackageStateInternal(String packageName,
             int callingUid) {
+        if (shouldHideBstPackage(packageName, callingUid)) {
+            return null;
+        }
         packageName = resolveInternalPackageNameInternalLocked(
                 packageName, PackageManager.VERSION_CODE_HIGHEST, callingUid);
         return mSettings.getPackage(packageName);
@@ -1685,6 +1695,9 @@ public class ComputerEngine implements Computer {
     @Override
     public PackageStateInternal getPackageStateFiltered(@NonNull String packageName,
             int callingUid, @UserIdInt int userId) {
+        if (shouldHideBstPackage(packageName, callingUid)) {
+            return null;
+        }
         packageName = resolveInternalPackageNameInternalLocked(
                 packageName, PackageManager.VERSION_CODE_HIGHEST, callingUid);
         var packageState = mSettings.getPackage(packageName);
@@ -1717,11 +1730,15 @@ public class ComputerEngine implements Computer {
         final boolean listFactory = (flags & MATCH_FACTORY_ONLY) != 0;
         // Only list archived apps, not fully uninstalled ones. Other entries are unaffected.
         final boolean listArchivedOnly = !listUninstalled && (flags & MATCH_ARCHIVED_PACKAGES) != 0;
+        final boolean bstCallerPrivileged = isBstCallerPrivileged(callingUid);
 
         ArrayList<PackageInfo> list;
         if (listUninstalled || listArchivedOnly) {
             list = new ArrayList<>(mSettings.getPackages().size());
             for (PackageStateInternal ps : mSettings.getPackages().values()) {
+                if (BstUtils.hideBlueStacksPkg(ps.getPackageName(), bstCallerPrivileged)) {
+                    continue;
+                }
                 if (listFactory) {
                     if (!ps.isSystem()) {
                         continue;
@@ -1754,6 +1771,9 @@ public class ComputerEngine implements Computer {
         } else {
             list = new ArrayList<>(mPackages.size());
             for (AndroidPackage p : mPackages.values()) {
+                if (BstUtils.hideBlueStacksPkg(p.getPackageName(), bstCallerPrivileged)) {
+                    continue;
+                }
                 PackageStateInternal ps = getPackageStateInternal(p.getPackageName());
                 if (listFactory) {
                     if (!ps.isSystem()) {
@@ -3613,6 +3633,10 @@ public class ComputerEngine implements Computer {
         enforceCrossUserPermission(callingUid, userId, false /*requireFullPermission*/,
                 false /*checkShell*/, "is package available");
 
+        if (shouldHideBstPackage(packageName, callingUid)) {
+            return false;
+        }
+
         final PackageStateInternal ps = getPackageStateInternal(packageName);
         if (ps != null && ps.getPkg() != null) {
             if (shouldFilterApplication(ps, callingUid, userId)) {
@@ -4617,6 +4641,7 @@ public class ComputerEngine implements Computer {
         final boolean listUninstalled = (flags & MATCH_KNOWN_PACKAGES) != 0;
         final boolean listApex = (flags & MATCH_APEX) != 0;
         final boolean listArchivedOnly = !listUninstalled && (flags & MATCH_ARCHIVED_PACKAGES) != 0;
+        final boolean bstCallerPrivileged = isBstCallerPrivileged(callingUid);
 
         if (!forceAllowCrossUser) {
             enforceCrossUserPermission(
@@ -4633,6 +4658,9 @@ public class ComputerEngine implements Computer {
         if (listUninstalled || listArchivedOnly) {
             list = new ArrayList<>(packageStates.size());
             for (PackageStateInternal ps : packageStates.values()) {
+                if (BstUtils.hideBlueStacksPkg(ps.getPackageName(), bstCallerPrivileged)) {
+                    continue;
+                }
                 ApplicationInfo ai;
                 long effectiveFlags = flags;
                 if (ps.isSystem()) {
@@ -4675,6 +4703,9 @@ public class ComputerEngine implements Computer {
                 if (pkg == null) {
                     continue;
                 }
+                if (BstUtils.hideBlueStacksPkg(pkg.getPackageName(), bstCallerPrivileged)) {
+                    continue;
+                }
                 if (!listApex && pkg.isApex()) {
                     continue;
                 }
@@ -4694,6 +4725,29 @@ public class ComputerEngine implements Computer {
         }
 
         return list;
+    }
+
+    private static boolean isBstCallerPrivileged(int callingUid) {
+        final String callingPackage = callingUid >= Process.FIRST_APPLICATION_UID
+                ? BstUtils.getAppNameFromPid(Binder.getCallingPid()) : "";
+        return BstUtils.bstIsCallingAppPrivileged(callingUid, callingPackage);
+    }
+
+    private static boolean shouldHideBstPackage(String packageName, int callingUid) {
+        return BstUtils.hideBlueStacksPkg(packageName, isBstCallerPrivileged(callingUid));
+    }
+
+    private boolean shouldHideBstActivityInfo(String packageName, int callingUid) {
+        if (callingUid < Process.FIRST_APPLICATION_UID) {
+            return false;
+        }
+        final String callingPackage = BstUtils.getAppNameFromPid(Binder.getCallingPid());
+        final BstFilterAppsManager filterApps = (BstFilterAppsManager)
+                mContext.getSystemService(Context.BST_FILTER_APPS);
+        return filterApps != null
+                && filterApps.isHideBstActivityInfo(callingPackage)
+                && BstUtils.hideBlueStacksPkg(packageName,
+                        BstUtils.bstIsCallingAppPrivileged(callingUid, callingPackage));
     }
 
     @Nullable
