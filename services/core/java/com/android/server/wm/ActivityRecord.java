@@ -426,7 +426,7 @@ final class ActivityRecord extends WindowToken {
 
     // How long we wait until giving up on an activity telling us it has
     // finished destroying itself.
-    private static final int DESTROY_TIMEOUT = 10 * 1000;
+    private static final int DESTROY_TIMEOUT = 20 * 1000;
 
     final ActivityTaskManagerService mAtmService;
     final ActivityCallerState mCallerState;

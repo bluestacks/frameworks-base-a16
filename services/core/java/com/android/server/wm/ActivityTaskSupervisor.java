@@ -198,7 +198,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     private static final int SLEEP_TIMEOUT = 5 * 1000 * Build.HW_TIMEOUT_MULTIPLIER;
 
     // How long we can hold the launch wake lock before giving up.
-    private static final int LAUNCH_TIMEOUT = 10 * 1000 * Build.HW_TIMEOUT_MULTIPLIER;
+    private static final int LAUNCH_TIMEOUT = 50 * 1000 * Build.HW_TIMEOUT_MULTIPLIER;
 
     /** How long we wait until giving up on the activity telling us it released the top state. */
     private static final int TOP_RESUMED_STATE_LOSS_TIMEOUT = 500;
