@@ -3025,6 +3025,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         return orientation;
     }
 
+    private static volatile boolean sBstLoginScreenOrientationLocked;
+    private static volatile int sBstLoginScreenOrientation = SCREEN_ORIENTATION_LANDSCAPE;
+
     /** Applies the BlueStacks per-app orientation policy to an app request. */
     @ScreenOrientation
     int getBstOrientation(@ScreenOrientation int requestedOrientation) {
@@ -3040,11 +3043,39 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             return SCREEN_ORIENTATION_PORTRAIT;
         }
 
+        // Keep Facebook and the Google credential picker aligned with the game that launched them.
+        final boolean isLoginScreen = "com.facebook.katana".equals(topPackage)
+                || "com.google.android.gms/.auth.api.credentials.ui.CredentialPickerActivity"
+                        .equals(topActivity);
+        if (!isLoginScreen) {
+            sBstLoginScreenOrientationLocked = false;
+        }
+
+        final String callingPackage = android.os.SystemProperties.get(
+                "bst.config.calling_package", "");
+        final boolean shouldLockLoginScreen = mWmService.mBstFilterApps != null
+                && mWmService.mBstFilterApps.isFbScreenLockApp(callingPackage);
+        if (isLoginScreen
+                && (sBstLoginScreenOrientationLocked || shouldLockLoginScreen)) {
+            if (!sBstLoginScreenOrientationLocked) {
+                sBstLoginScreenOrientationLocked = true;
+                sBstLoginScreenOrientation = getBstOrientationForPackage(
+                        requestedOrientation, callingPackage);
+            }
+            return sBstLoginScreenOrientation;
+        }
+
+        return getBstOrientationForPackage(requestedOrientation, topPackage);
+    }
+
+    @ScreenOrientation
+    private int getBstOrientationForPackage(@ScreenOrientation int requestedOrientation,
+            String packageName) {
         if (mWmService.mBstFilterApps != null) {
-            if (mWmService.mBstFilterApps.isSmallScreenApp(topPackage)) {
+            if (mWmService.mBstFilterApps.isSmallScreenApp(packageName)) {
                 return SCREEN_ORIENTATION_PORTRAIT;
             }
-            if (mWmService.mBstFilterApps.isPortraitDisabled(topPackage)) {
+            if (mWmService.mBstFilterApps.isPortraitDisabled(packageName)) {
                 return SCREEN_ORIENTATION_LANDSCAPE;
             }
         }
