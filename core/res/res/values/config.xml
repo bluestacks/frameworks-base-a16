@@ -1998,6 +1998,8 @@
     <string-array name="config_forceQueryablePackages" translatable="false">
         <item>com.android.settings</item>
         <item>com.android.providers.settings</item>
+        <item>com.android.vending</item>
+        <item>gg.now.billing.service2</item>
         <!-- Add packages here -->
     </string-array>
 
