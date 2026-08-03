@@ -152,6 +152,7 @@ import android.util.ArraySet;
 import android.util.BstUtils;
 import android.util.EventLog;
 import android.util.ExceptionUtils;
+import android.util.Features;
 import android.util.IntArray;
 import android.util.Log;
 import android.util.Pair;
@@ -187,6 +188,8 @@ import com.android.server.pm.pkg.SharedLibraryWrapper;
 import com.android.server.rollback.RollbackManagerInternal;
 import com.android.server.utils.WatchedArrayMap;
 import com.android.server.utils.WatchedLongSparseArray;
+
+import com.bluestacks.os.BstFilterAppsManager;
 
 import dalvik.system.VMRuntime;
 
@@ -1491,6 +1494,44 @@ final class InstallPackageHelper {
         return newProp != null && newProp.getBoolean();
     }
 
+    private void clearBstAppDataForAbiModeChange(String packageName, int installFlags) {
+        if ((installFlags & PackageManager.INSTALL_REPLACE_EXISTING) == 0) {
+            return;
+        }
+
+        final BstFilterAppsManager filterApps = (BstFilterAppsManager)
+                mContext.getSystemService(Context.BST_FILTER_APPS);
+        if (filterApps == null || !filterApps.isClearInstallApp(packageName)) {
+            return;
+        }
+
+        final AndroidPackage installedPackage;
+        final String nativeLibraryPath;
+        synchronized (mPm.mLock) {
+            final PackageSetting packageSetting = mPm.mSettings.getPackageLPr(packageName);
+            if (packageSetting == null) {
+                return;
+            }
+            installedPackage = packageSetting.getPkg();
+            nativeLibraryPath = packageSetting.getLegacyNativeLibraryPath();
+        }
+        if (installedPackage == null || nativeLibraryPath == null) {
+            return;
+        }
+
+        final boolean forceArm = filterApps.forceArmInstall(packageName);
+        final boolean forceX86 = filterApps.forceX86Install(packageName);
+        final boolean hasArmLibraries =
+                new File(nativeLibraryPath, Features.GetArmAppMarker()).exists();
+        if ((hasArmLibraries && forceX86) || (!hasArmLibraries && forceArm)) {
+            Slog.i(TAG, "Clearing " + packageName + " data for ABI mode change"
+                    + ": forceArm=" + forceArm + " forceX86=" + forceX86
+                    + " hasArmLibraries=" + hasArmLibraries);
+            mAppDataHelper.destroyAppDataLIF(installedPackage, UserHandle.USER_ALL,
+                    FLAG_STORAGE_DE | FLAG_STORAGE_CE);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private void applyBstAffiliateInstallSource(InstallRequest request, String packageName) {
         try {
@@ -1695,6 +1736,8 @@ final class InstallPackageHelper {
             throw new PrepareFailure(INSTALL_FAILED_SESSION_INVALID,
                     "Instant app package must be signed with APK Signature Scheme v2 or greater");
         }
+
+        clearBstAppDataForAbiModeChange(pkgName, installFlags);
 
         // Keep referral file I/O and delay outside the package-manager global lock.
         applyBstAffiliateInstallSource(request, pkgName);
