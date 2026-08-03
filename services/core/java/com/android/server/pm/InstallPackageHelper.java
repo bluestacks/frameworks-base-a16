@@ -4202,6 +4202,18 @@ final class InstallPackageHelper {
             @PackageManagerService.ScanFlags int rescanFlags = rescanAndReparseFlags.first;
             @ParsingPackageUtils.ParseFlags int reparseFlags = rescanAndReparseFlags.second;
 
+            final File blueStacksPrivAppDir =
+                    new File(Environment.getDataDirectory(), "priv-downloads");
+            final File blueStacksAppDir =
+                    new File(Environment.getDataDirectory(), "downloads");
+            if (FileUtils.contains(blueStacksPrivAppDir, scanFile)) {
+                reparseFlags = systemParseFlags;
+                rescanFlags = systemScanFlags | SCAN_AS_PRIVILEGED | SCAN_AS_SYSTEM;
+            } else if (FileUtils.contains(blueStacksAppDir, scanFile)) {
+                reparseFlags = systemParseFlags;
+                rescanFlags = systemScanFlags | SCAN_AS_SYSTEM;
+            }
+
             if (rescanFlags == 0) {
                 Slog.e(TAG, "Ignoring unexpected fallback path " + scanFile);
                 continue;

@@ -388,6 +388,16 @@ final class InitAppsHelper {
                     partition.apexInfo);
         }
 
+        final File blueStacksPrivAppDir =
+                new File(Environment.getDataDirectory(), "priv-downloads");
+        collectScanParams(scanParamsList, blueStacksPrivAppDir, mSystemParseFlags,
+                mSystemScanFlags | SCAN_AS_PRIVILEGED, packageParser, executorService, null);
+
+        final File blueStacksAppDir =
+                new File(Environment.getDataDirectory(), "downloads");
+        collectScanParams(scanParamsList, blueStacksAppDir, mSystemParseFlags,
+                mSystemScanFlags, packageParser, executorService, null);
+
         // Scan all directories with the parameters contained in scanParamsList.
         parallelScanDirTracedLI(scanParamsList, packageParser, executorService);
 
