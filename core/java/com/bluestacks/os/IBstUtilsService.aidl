@@ -5,7 +5,8 @@ import android.os.ResultReceiver;
 /**
   * Functions ordering here should not be altered,
   * If new functions are to added, they should be appended.
-  * This order directly corresponds to ordering in /frameworks/native/include/binder/IBstUtilsService.h
+  * This order directly corresponds to ordering in
+  * /frameworks/native/libs/binder/include/binder/IBstUtilsService.h
   * If order of functions is altered here, similar changes should be done in /framework/native.
   */
 

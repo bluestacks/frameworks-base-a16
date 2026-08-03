@@ -3,7 +3,8 @@ package com.bluestacks.os;
 /**
   * Functions ordering here should not be altered,
   * If new functions are to added, they should be appended.
-  * This order directly corresponds to ordering in /frameworks/native/include/binder/IBstFilterAppsService.h
+  * This order directly corresponds to ordering in
+  * /frameworks/native/libs/binder/include/binder/IBstFilterAppsService.h
   * If order of functions is altered here, similar changes should be done in /framework/native.
   */
 interface IBstFilterAppsService
