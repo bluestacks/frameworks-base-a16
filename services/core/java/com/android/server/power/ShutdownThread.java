@@ -370,7 +370,7 @@ public final class ShutdownThread extends Thread {
         pd.setCancelable(false);
         pd.getWindow().setType(WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG);
 
-        pd.show();
+        // The host owns app-player shutdown UX; keep the dialog object hidden in the guest.
         return pd;
     }
 
