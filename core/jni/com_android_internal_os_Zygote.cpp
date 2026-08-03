@@ -1978,6 +1978,27 @@ static bool BstPackageInList(const char* path, const std::string& package_name) 
   return false;
 }
 
+static std::optional<std::string> BstMemorySizeForPackage(const std::string& package_name) {
+  static constexpr const char* kMemorySizeApps =
+          "/data/downloads/.tmp/.bstMemorySizeApps";
+  std::string contents;
+  if (package_name.empty() || !ReadBstSmallFile(kMemorySizeApps, &contents)) {
+    return std::nullopt;
+  }
+  std::stringstream stream(contents);
+  std::string line;
+  while (std::getline(stream, line)) {
+    const size_t separator = line.find(';');
+    if (separator == std::string::npos || separator + 1 >= line.size()) {
+      continue;
+    }
+    if (line.substr(0, separator) == package_name) {
+      return line.substr(separator + 1);
+    }
+  }
+  return std::nullopt;
+}
+
 // Utility routine to specialize a zygote child process.
 static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, jint runtime_flags,
                              jobjectArray rlimits, jlong permitted_capabilities,
@@ -2107,6 +2128,20 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, 
         env->CallStaticVoidMethod(gZygoteInitClass, gPrefetchStandaloneSystemServerJars);
         if (env->ExceptionCheck()) {
             env->ExceptionClear();
+        }
+    }
+
+    if (uid >= AID_APP_START) {
+        const std::optional<std::string> memory_size =
+                BstMemorySizeForPackage(bst_package_name);
+        if (memory_size.has_value()) {
+            const std::string source =
+                    "/data/downloads/.tmp/xmeminfo." + memory_size.value();
+            if (TEMP_FAILURE_RETRY(mount(source.c_str(), "/proc/meminfo", nullptr, MS_BIND,
+                                         nullptr)) == -1) {
+                ALOGW("Failed to bind-mount %s as /proc/meminfo: %s", source.c_str(),
+                      strerror(errno));
+            }
         }
     }
 
