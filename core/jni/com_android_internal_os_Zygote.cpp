@@ -1867,6 +1867,85 @@ static void SetBuildVersionSdkInt(JNIEnv* env, jint value) {
   env->SetStaticIntField(build_version_cls, field_id, value);
 }
 
+static void SetBuildStringArray(JNIEnv* env, jclass build_class, const char* field_name,
+                                const std::vector<std::string>& values) {
+  jfieldID field_id =
+          env->GetStaticFieldID(build_class, field_name, "[Ljava/lang/String;");
+  if (field_id == nullptr) {
+    env->ExceptionClear();
+    ALOGW("Unable to find Build.%s", field_name);
+    return;
+  }
+  ScopedLocalRef<jclass> string_class(env, env->FindClass("java/lang/String"));
+  if (string_class.get() == nullptr) {
+    env->ExceptionClear();
+    return;
+  }
+  ScopedLocalRef<jobjectArray> array(
+          env, env->NewObjectArray(values.size(), string_class.get(), nullptr));
+  if (array.get() == nullptr) {
+    env->ExceptionClear();
+    return;
+  }
+  for (size_t i = 0; i < values.size(); ++i) {
+    ScopedLocalRef<jstring> value(env, env->NewStringUTF(values[i].c_str()));
+    if (value.get() == nullptr) {
+      env->ExceptionClear();
+      return;
+    }
+    env->SetObjectArrayElement(array.get(), i, value.get());
+  }
+  env->SetStaticObjectField(build_class, field_id, array.get());
+}
+
+static void ApplyVendingAbiOverride(JNIEnv* env, uid_t uid, const char* process_name) {
+  if (uid < AID_APP_START || process_name == nullptr
+      || strncmp(process_name, "com.android.vending", strlen("com.android.vending")) != 0) {
+    return;
+  }
+
+  std::vector<std::string> abi32;
+  std::vector<std::string> abi64;
+  std::stringstream stream(android::base::GetProperty("bst.abi_list", "x86,arm"));
+  std::string abi;
+  while (std::getline(stream, abi, ',')) {
+    if (abi == "x86") {
+      abi32.emplace_back("x86");
+    } else if (abi == "arm") {
+      abi32.emplace_back("armeabi-v7a");
+      abi32.emplace_back("armeabi");
+    } else if (abi == "arm64") {
+      abi64.emplace_back("arm64-v8a");
+    } else if (abi == "x64") {
+      abi64.emplace_back("x86_64");
+    }
+  }
+  if (abi32.empty() && abi64.empty()) {
+    ALOGW("Invalid bst.abi_list; using x86/ARM defaults");
+    abi32 = {"x86", "armeabi-v7a", "armeabi"};
+#if defined(__LP64__)
+    abi64 = {"x86_64", "arm64-v8a"};
+#endif
+  }
+
+  std::vector<std::string> all;
+#if defined(__LP64__)
+  all.insert(all.end(), abi64.begin(), abi64.end());
+#endif
+  all.insert(all.end(), abi32.begin(), abi32.end());
+
+  ScopedLocalRef<jclass> build_class(env, env->FindClass("android/os/Build"));
+  if (build_class.get() == nullptr) {
+    env->ExceptionClear();
+    return;
+  }
+#if defined(__LP64__)
+  SetBuildStringArray(env, build_class.get(), "SUPPORTED_64_BIT_ABIS", abi64);
+#endif
+  SetBuildStringArray(env, build_class.get(), "SUPPORTED_ABIS", all);
+  SetBuildStringArray(env, build_class.get(), "SUPPORTED_32_BIT_ABIS", abi32);
+}
+
 static void BindMountSyspropOverride(fail_fn_t fail_fn, JNIEnv* env) {
   std::string source = "/dev/__properties__/appcompat_override";
   std::string target = "/dev/__properties__";
@@ -2247,6 +2326,7 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, 
                        strlen("jp.co.mixi.monsterstrike")) == 0) {
         SetBuildVersionSdkInt(env, 30);
     }
+    ApplyVendingAbiOverride(env, uid, nice_name_ptr);
     android_mallopt_gwp_asan_options_t gwp_asan_options;
     const char* kGwpAsanAppRecoverableSysprop =
             "persist.device_config.memory_safety_native.gwp_asan_recoverable_apps";
