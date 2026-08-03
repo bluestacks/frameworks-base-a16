@@ -33,6 +33,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SpecialUsers.CanBeALL;
 import android.annotation.UserIdInt;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
 import android.content.pm.parsing.ApkLiteParseUtils;
@@ -40,6 +41,7 @@ import android.content.pm.parsing.PackageLite;
 import android.content.pm.parsing.result.ParseResult;
 import android.content.pm.parsing.result.ParseTypeImpl;
 import android.os.Environment;
+import android.os.Process;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.incremental.IncrementalManager;
@@ -56,6 +58,8 @@ import com.android.server.pm.parsing.PackageCacher;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
+
+import com.bluestacks.os.BstFilterAppsManager;
 
 import java.io.File;
 import java.util.Collections;
@@ -163,12 +167,22 @@ final class RemovePackageHelper {
         }
 
         // writer
+        final AndroidPackage removedPackage;
         synchronized (mPm.mLock) {
-            final AndroidPackage removedPackage = mPm.mPackages.remove(packageName);
+            removedPackage = mPm.mPackages.remove(packageName);
             if (removedPackage != null) {
                 // TODO: Use PackageState for isSystem
                 cleanPackageDataStructuresLILPw(removedPackage,
                         AndroidPackageLegacyUtils.isSystem(removedPackage), chatty);
+            }
+        }
+        if (removedPackage != null && removedPackage.getUid() >= Process.FIRST_APPLICATION_UID) {
+            final BstFilterAppsManager filterApps = (BstFilterAppsManager)
+                    mPm.mContext.getSystemService(Context.BST_FILTER_APPS);
+            if (filterApps != null) {
+                filterApps.updateAbiEntry(removedPackage.getUid(),
+                        removedPackage.getPackageName(),
+                        BstFilterAppsManager.REMOVE_ABI2_ENTRY);
             }
         }
     }

@@ -96,6 +96,8 @@ import static com.android.server.pm.PackageManagerServiceUtils.logCriticalInfo;
 import static com.android.server.pm.PackageManagerServiceUtils.makeDirRecursive;
 import static com.android.server.pm.ParallelPackageParser.OrderedResult;
 import static com.android.server.pm.SharedUidMigration.BEST_EFFORT;
+import static com.bluestacks.os.BstFilterAppsManager.ADD_ABI2_ENTRY;
+import static com.bluestacks.os.BstFilterAppsManager.REMOVE_ABI2_ENTRY;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -3973,6 +3975,24 @@ final class InstallPackageHelper {
     }
 
     @GuardedBy({"mPm.mInstallLock", "mPm.mLock"})
+    private void updateBstAbiEntryAfterScan(ParsedPackage parsedPackage) {
+        final String packageName = parsedPackage.getPackageName();
+        final PackageSetting packageSetting = mPm.mSettings.getPackageLPr(packageName);
+        if (packageSetting == null || packageSetting.getAppId() < Process.FIRST_APPLICATION_UID) {
+            return;
+        }
+        final BstFilterAppsManager filterApps = (BstFilterAppsManager)
+                mContext.getSystemService(Context.BST_FILTER_APPS);
+        if (filterApps == null) {
+            return;
+        }
+        final String primaryAbi = packageSetting.getPrimaryCpuAbi();
+        final int action = primaryAbi != null && primaryAbi.startsWith("arm")
+                ? ADD_ABI2_ENTRY : REMOVE_ABI2_ENTRY;
+        filterApps.updateAbiEntry(packageSetting.getAppId(), packageName, action);
+    }
+
+    @GuardedBy({"mPm.mInstallLock", "mPm.mLock"})
     private int scanDirectoryForFilesToParse(ParallelPackageParser parallelPackageParser,
             ScanParams scanParams) {
         final File[] files = scanParams.scanDir.listFiles();
@@ -4070,6 +4090,7 @@ final class InstallPackageHelper {
                 Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "addForInitLI");
                 addForInitLI(result.parsedPackage, scanParams.parseFlags, scanParams.scanFlags,
                         new UserHandle(UserHandle.USER_SYSTEM), scanParams.apexInfo);
+                updateBstAbiEntryAfterScan(result.parsedPackage);
             } catch (PackageManagerException e) {
                 errorCode = e.error;
                 errorMsg = "Failed to scan " + result.scanFile + ": " + e.getMessage();
