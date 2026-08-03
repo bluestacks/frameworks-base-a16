@@ -6580,7 +6580,11 @@ public final class Settings implements Watchable, Snappable, ResilientAtomicFile
                     final TypedXmlPullParser parser = Xml.resolvePullParser(in);
                     parseLegacyRuntimePermissions(parser, userId, packageStates, sharedUsers);
 
-                } catch (XmlPullParserException | IOException e) {
+                } catch (XmlPullParserException e) {
+                    Slog.e(PackageManagerService.TAG, "Deleting malformed permissions file: "
+                            + permissionsFile, e);
+                    deleteUserRuntimePermissionsFile(userId);
+                } catch (IOException e) {
                     throw new IllegalStateException("Failed parsing permissions file: "
                             + permissionsFile, e);
                 } finally {
