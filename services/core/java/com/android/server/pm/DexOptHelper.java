@@ -66,6 +66,8 @@ import com.android.server.pm.local.PackageManagerLocalImpl;
 import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.snapshot.PackageDataSnapshot;
 
+import com.bluestacks.os.BstFilterAppsManager;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -93,6 +95,7 @@ public final class DexOptHelper {
 
     private final PackageManagerService mPm;
     private final InstallScenarioHelper mInstallScenarioHelper;
+    private BstFilterAppsManager mBstFilterApps;
 
     static {
         // Recycle the thread if it's not used for `keepAliveTime`.
@@ -324,6 +327,16 @@ public final class DexOptHelper {
         String compilationReason =
                 mInstallScenarioHelper.getCompilationReasonForInstallScenario(
                         installRequest.getInstallScenario());
+        if (mBstFilterApps == null) {
+            mBstFilterApps = (BstFilterAppsManager)
+                    mPm.mContext.getSystemService(Context.BST_FILTER_APPS);
+        }
+        final PackageSetting packageSetting = installRequest.getScannedPackageSetting();
+        if (mBstFilterApps != null && packageSetting != null
+                && mBstFilterApps.isForcedDexoptWithInstallFlag(
+                        packageSetting.getPackageName())) {
+            compilationReason = ReasonMapping.REASON_INSTALL;
+        }
         var builder = new DexoptParams.Builder(compilationReason);
         if (installRequest.getInstallReason() == INSTALL_REASON_DEVICE_RESTORE
                 || installRequest.getInstallReason() == INSTALL_REASON_DEVICE_SETUP) {
