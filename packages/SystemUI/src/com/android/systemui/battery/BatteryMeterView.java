@@ -40,6 +40,7 @@ import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -149,6 +150,7 @@ public class BatteryMeterView extends LinearLayout implements DarkReceiver {
                     getResources().getDimensionPixelOffset(R.dimen.battery_margin_bottom));
             addView(mBatteryIconView, mlp);
         }
+        mBatteryIconView.setVisibility(View.INVISIBLE);
 
         updateShowPercent();
         mDualToneHandler = new DualToneHandler(context);
@@ -539,6 +541,7 @@ public class BatteryMeterView extends LinearLayout implements DarkReceiver {
                     com.android.internal.R.bool.config_defaultBatteryPercentageSetting)
                     ? 1 : 0, UserHandle.USER_CURRENT));
         }
+        shouldShow = false;
 
         setBatteryDrawableState(
                 new BatteryDrawableState(
@@ -569,7 +572,7 @@ public class BatteryMeterView extends LinearLayout implements DarkReceiver {
                 (mShowPercentAvailable && systemSetting && mShowPercentMode != MODE_OFF)
                 || mShowPercentMode == MODE_ON
                 || mShowPercentMode == MODE_ESTIMATE;
-        shouldShow = shouldShow && !mBatteryStateUnknown;
+        shouldShow = false;
 
         if (shouldShow) {
             if (!showing) {

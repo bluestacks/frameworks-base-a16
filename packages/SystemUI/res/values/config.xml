@@ -102,12 +102,10 @@
 
     <!-- The default tiles to display in QuickSettings -->
     <string name="quick_settings_tiles_default" translatable="false">
-        internet,bt,flashlight,dnd,alarm,airplane,controls,wallet,rotation,battery,cast,screenrecord,mictoggle,cameratoggle,custom(com.android.permissioncontroller/.permission.service.v33.SafetyCenterQsTileService)
     </string>
 
     <!-- The default tiles to display in QuickSettings with the new UI -->
     <string name="quick_settings_tiles_new_default" translatable="false">
-        internet,bt,dnd,cast,flashlight,airplane,rotation,wallet,alarm,controls,screenrecord,battery
     </string>
 
     <!-- The class path of the Safety Quick Settings Tile -->
@@ -120,7 +118,6 @@
 
     <!-- Tiles native to System UI. Order should match "quick_settings_tiles_default" -->
     <string name="quick_settings_tiles_stock" translatable="false">
-        internet,bt,flashlight,dnd,modes_dnd,alarm,airplane,controls,wallet,rotation,battery,cast,screenrecord,mictoggle,cameratoggle,location,hotspot,inversion,saver,dark,work,night,reverse,reduce_brightness,qr_code_scanner,onehanded,color_correction,dream,font_scaling,record_issue,hearing_devices,notes,desktopeffects
     </string>
 
     <!-- The tiles to display in QuickSettings -->
@@ -583,7 +580,19 @@
      -->
     <string-array name="config_statusBarIconsToExclude" translatable="false">
         <item>@*android:string/status_bar_rotate</item>
+        <item>@*android:string/status_bar_volume</item>
+        <item>@*android:string/status_bar_airplane</item>
+        <item>@*android:string/status_bar_zen</item>
+        <item>@*android:string/status_bar_alarm_clock</item>
         <item>@*android:string/status_bar_headset</item>
+        <item>@*android:string/status_bar_bluetooth</item>
+        <item>@*android:string/status_bar_managed_profile</item>
+        <item>@*android:string/status_bar_cast</item>
+        <item>@*android:string/status_bar_hotspot</item>
+        <item>@*android:string/status_bar_mobile</item>
+        <item>@*android:string/status_bar_ethernet</item>
+        <item>@*android:string/status_bar_wifi</item>
+        <item>@*android:string/status_bar_battery</item>
     </string-array>
 
 

@@ -30,6 +30,7 @@
         android:scrollbars="none"
         android:clipChildren="false"
         android:clipToPadding="false"
+        android:visibility="gone"
         android:layout_weight="1">
         <com.android.systemui.qs.QSPanel
             android:id="@+id/quick_settings_panel"

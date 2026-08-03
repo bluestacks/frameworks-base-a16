@@ -134,6 +134,7 @@ public class TunerServiceImpl extends TunerService {
         };
         mUserTracker.addCallback(mCurrentUserTracker,
                 new HandlerExecutor(mainHandler));
+        initializeIconHideList();
     }
 
     @Override
@@ -167,6 +168,14 @@ public class TunerServiceImpl extends TunerService {
                     () -> clearAllFromUser(user), 5000);
         }
         setValue(TUNER_VERSION, newVersion);
+    }
+
+    private void initializeIconHideList() {
+        final ArraySet<String> iconHideList = StatusBarIconController.getIconHideList(
+                mContext, null);
+        Settings.Secure.putStringForUser(mContentResolver,
+                StatusBarIconController.ICON_HIDE_LIST,
+                TextUtils.join(",", iconHideList), mCurrentUser);
     }
 
     @Override
