@@ -166,6 +166,7 @@ import android.provider.Settings.Secure;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.BstUtils;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.ExceptionUtils;
@@ -257,6 +258,7 @@ import com.android.server.utils.WatchedArrayMap;
 import com.android.server.utils.WatchedSparseBooleanArray;
 import com.android.server.utils.WatchedSparseIntArray;
 import com.android.server.utils.Watcher;
+import com.bluestacks.os.BstFilterAppsManager;
 
 import libcore.util.EmptyArray;
 import libcore.util.HexEncoding;
@@ -371,6 +373,9 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     private static final int SE_UID = Process.SE_UID;
     private static final int NETWORKSTACK_UID = Process.NETWORK_STACK_UID;
     private static final int UWB_UID = Process.UWB_UID;
+
+    private static final boolean BST_DEBUG =
+            SystemProperties.getInt("bst.debug.pm", 0) != 0;
 
     static final int SCAN_NO_DEX = 1 << 0;
     static final int SCAN_UPDATE_SIGNATURE = 1 << 1;
@@ -695,6 +700,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     private final String mIncrementalVersion;
 
     PackageManagerInternal.ExternalSourcesPolicy mExternalSourcesPolicy;
+
+    private BstFilterAppsManager mBstFilterAppsManager;
 
     private final ArrayMap<String, FeatureInfo> mAvailableFeatures;
 
@@ -2963,7 +2970,50 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         mChangedPackagesTracker.updateSequenceNumber(pkgSetting.getPackageName(), userList);
     }
 
+    @Nullable
+    private BstFilterAppsManager getBstFilterAppsManager() {
+        if (mBstFilterAppsManager == null) {
+            mBstFilterAppsManager = (BstFilterAppsManager) mContext.getSystemService(
+                    Context.BST_FILTER_APPS);
+        }
+        return mBstFilterAppsManager;
+    }
+
     public boolean hasSystemFeature(String name, int version) {
+        final int callingUid = Binder.getCallingUid();
+        final String callingPackage = callingUid >= Process.FIRST_APPLICATION_UID
+                ? BstUtils.getAppNameFromPid(Binder.getCallingPid()) : null;
+
+        if (callingUid >= Process.FIRST_APPLICATION_UID
+                && ("android.hardware.faketouch".equalsIgnoreCase(name)
+                || "android.hardware.ethernet".equalsIgnoreCase(name))) {
+            return false;
+        }
+
+        if (callingUid >= Process.FIRST_APPLICATION_UID
+                && "com.android.vending".equalsIgnoreCase(callingPackage)
+                && "android.hardware.opengles.aep".equalsIgnoreCase(name)) {
+            return true;
+        }
+
+        if (callingUid >= Process.FIRST_APPLICATION_UID
+                && ("android.hardware.bluestacks".equalsIgnoreCase(name)
+                || "android.hardware.nap".equalsIgnoreCase(name))) {
+            final BstFilterAppsManager filterApps = getBstFilterAppsManager();
+            if (filterApps != null && callingPackage != null
+                    && filterApps.isBluestacksPartnerApp(callingPackage)) {
+                return true;
+            }
+        }
+
+        if ("android.hardware.nowgg".equalsIgnoreCase(name)) {
+            if (BST_DEBUG) {
+                Log.d(TAG, "Package " + callingPackage + " queried for feature " + name);
+            }
+            reportNowggPlatformDetection(callingPackage);
+            return true;
+        }
+
         // allow instant applications
         final FeatureInfo feat = mAvailableFeatures.get(name);
         if (feat == null) {
@@ -2971,6 +3021,29 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         } else {
             return feat.version >= version;
         }
+    }
+
+    private void reportNowggPlatformDetection(@Nullable String packageName) {
+        String versionName = "";
+        String versionCode = "";
+        try {
+            final PackageInfo packageInfo = snapshotComputer().getPackageInfo(packageName, 0, 0);
+            if (packageInfo != null) {
+                versionName = packageInfo.versionName;
+                versionCode = Integer.toString(packageInfo.versionCode);
+            }
+        } catch (RuntimeException e) {
+            Log.e(TAG, "Unable to resolve now.gg platform detector package", e);
+        }
+
+        final Intent intent = new Intent();
+        intent.setComponent(new ComponentName("com.bluestacks.BstCommandProcessor",
+                "com.bluestacks.BstCommandProcessor.BstCommandProcessorService"));
+        intent.setAction("reportNowggPlatformDetection");
+        intent.putExtra("pkgname", packageName);
+        intent.putExtra("versionname", versionName != null ? versionName : "");
+        intent.putExtra("versioncode", versionCode);
+        mContext.startServiceAsUser(intent, Process.myUserHandle());
     }
 
     // NOTE: Can't remove due to unsupported app usage
@@ -5483,14 +5556,38 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
         @Override
         public @NonNull ParceledListSlice<FeatureInfo> getSystemAvailableFeatures() {
+            final int callingUid = Binder.getCallingUid();
+            final boolean appCaller = callingUid >= Process.FIRST_APPLICATION_UID;
+            final String callingPackage = appCaller
+                    ? BstUtils.getAppNameFromPid(Binder.getCallingPid()) : null;
+            int requestedGlEsVersion = -1;
+            if (appCaller) {
+                final BstFilterAppsManager filterApps = getBstFilterAppsManager();
+                if (filterApps != null) {
+                    requestedGlEsVersion = filterApps.getGlVersion(callingPackage);
+                }
+            }
+
             // allow instant applications
             ArrayList<FeatureInfo> res;
             res = new ArrayList<>(mAvailableFeatures.size() + 1);
             res.addAll(mAvailableFeatures.values());
             final FeatureInfo fi = new FeatureInfo();
-            fi.reqGlEsVersion = SystemProperties.getInt("ro.opengles.version",
-                    FeatureInfo.GL_ES_VERSION_UNDEFINED);
+            fi.reqGlEsVersion = requestedGlEsVersion != -1
+                    ? requestedGlEsVersion : SystemProperties.getInt("ro.opengles.version",
+                            FeatureInfo.GL_ES_VERSION_UNDEFINED);
             res.add(fi);
+
+            if ("com.android.vending".equalsIgnoreCase(callingPackage)) {
+                final FeatureInfo featureInfo = new FeatureInfo();
+                featureInfo.name = "android.hardware.opengles.aep";
+                res.add(featureInfo);
+            }
+
+            if (appCaller) {
+                res.removeIf(feature -> "android.hardware.faketouch".equalsIgnoreCase(feature.name)
+                        || "android.hardware.ethernet".equalsIgnoreCase(feature.name));
+            }
 
             return new ParceledListSlice<>(res);
         }
