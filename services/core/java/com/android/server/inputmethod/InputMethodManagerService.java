@@ -193,6 +193,7 @@ import com.android.server.pm.UserManagerInternal;
 import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.utils.PriorityDump;
 import com.bluestacks.os.BstFilterAppsManager;
+import com.bluestacks.os.BstHostCallCcCodes;
 import com.bluestacks.os.BstHostCallManager;
 import com.android.server.wm.WindowManagerInternal;
 
@@ -3268,9 +3269,19 @@ public final class InputMethodManagerService implements IInputMethodManagerImpl.
 
     @GuardedBy("ImfLock.class")
 
-    // A16DBG:P2:FW-SERVICES-6b BST text-edit-mode host sync for keyboard mapping (a13; mCurAttribute
-    // password-detect block omitted — field absent in a16; core isIMEDisabled gate + onTextEditModeChange kept)
-    private void bstSendSetInputMapperStatusAsync(boolean ime_enabled) {
+    public static boolean isPasswordInputType(int inputType) {
+        int variation = inputType & (EditorInfo.TYPE_MASK_CLASS | EditorInfo.TYPE_MASK_VARIATION);
+        return variation == (EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_VARIATION_PASSWORD)
+                || variation == (EditorInfo.TYPE_CLASS_TEXT
+                        | EditorInfo.TYPE_TEXT_VARIATION_WEB_PASSWORD)
+                || variation == (EditorInfo.TYPE_CLASS_TEXT
+                        | EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD)
+                || variation == (EditorInfo.TYPE_CLASS_NUMBER
+                        | EditorInfo.TYPE_NUMBER_VARIATION_PASSWORD);
+    }
+
+    // A16DBG:P2:FW-SERVICES-6b BST text-edit-mode host sync for keyboard mapping (a13)
+    private void bstSendSetInputMapperStatusAsync(boolean ime_enabled, @UserIdInt int userId) {
         String topActivityName = android.os.SystemProperties.get("bst.config.top_activity_name", null);
         if (topActivityName != null) {
             String[] parts = topActivityName.split("/");
@@ -3285,14 +3296,25 @@ public final class InputMethodManagerService implements IInputMethodManagerImpl.
                 ime_enabled = false;
             }
         }
+        if (mBstHostCallManagerService == null) {
+            mBstHostCallManagerService = (BstHostCallManager)
+                    mContext.getSystemService(Context.BST_HOST_CALL);
+        }
+        if (mBstHostCallManagerService != null) {
+            final EditorInfo editorInfo = getUserData(userId).mCurEditorInfo;
+            final boolean isPassword = editorInfo != null
+                    && isPasswordInputType(editorInfo.inputType);
+            mBstHostCallManagerService.commonCommand(
+                    isPassword && ime_enabled
+                            ? BstHostCallCcCodes.HCALL_CC_hcallPasswordInputOn
+                            : BstHostCallCcCodes.HCALL_CC_hcallPasswordInputOff,
+                    "", "");
+        }
+
         if (ime_enabled != bstWinKeyboardInputEnabled) {
             bstWinKeyboardInputEnabled = ime_enabled;
         } else {
             return;
-        }
-        if (mBstHostCallManagerService == null) {
-            mBstHostCallManagerService = (BstHostCallManager)
-                    mContext.getSystemService(Context.BST_HOST_CALL);
         }
         if (mBstHostCallManagerService != null) {
             mBstHostCallManagerService.onTextEditModeChange(bstWinKeyboardInputEnabled);
@@ -3303,7 +3325,7 @@ public final class InputMethodManagerService implements IInputMethodManagerImpl.
             @NonNull ImeTracker.Token statsToken, @SoftInputShowHideReason int reason,
             @UserIdInt int userId) {
         // A16DBG:P2:FW-SERVICES-6b BST enable text-edit-mode on show (a13)
-        bstSendSetInputMapperStatusAsync(true);
+        bstSendSetInputMapperStatusAsync(true, userId);
         final var userData = getUserData(userId);
         final var visibilityStateComputer = userData.mVisibilityStateComputer;
         if (!visibilityStateComputer.isAllowedByAccessibilityAndDisplayPolicy()) {
@@ -3431,7 +3453,7 @@ public final class InputMethodManagerService implements IInputMethodManagerImpl.
             @NonNull ImeTracker.Token statsToken, @SoftInputShowHideReason int reason,
             @UserIdInt int userId) {
         // A16DBG:P2:FW-SERVICES-6b BST disable text-edit-mode on hide (a13)
-        bstSendSetInputMapperStatusAsync(false);
+        bstSendSetInputMapperStatusAsync(false, userId);
         final var userData = getUserData(userId);
         final var bindingController = userData.mBindingController;
         final var visibilityStateComputer = userData.mVisibilityStateComputer;
