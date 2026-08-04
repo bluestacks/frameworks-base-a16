@@ -495,6 +495,14 @@ const std::string readLocale()
         return out;
     }
 
+    const std::string bstLocale = GetProperty("bst.locale", "");
+    const size_t separator = bstLocale.find('-');
+    if (separator != std::string::npos && separator > 0
+            && separator + 1 < bstLocale.length()) {
+        ALOGD("Using BlueStacks locale %s", bstLocale.c_str());
+        return bstLocale;
+    }
+
     const std::string productLocale = GetProperty("ro.product.locale", "");
     if (!productLocale.empty()) {
         return productLocale;
@@ -505,7 +513,10 @@ const std::string readLocale()
     const std::string productLanguage = GetProperty("ro.product.locale.language", "en");
     const std::string productRegion = GetProperty("ro.product.locale.region", "US");
 
-    return productLanguage + "-" + productRegion;
+    if (!productLanguage.empty() && !productRegion.empty()) {
+        return productLanguage + "-" + productRegion;
+    }
+    return "en-US";
 }
 
 void AndroidRuntime::addOption(const char* optionString, void* extraInfo)
