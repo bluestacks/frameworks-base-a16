@@ -19,6 +19,9 @@
 
 #include <utility>
 #include <optional>
+#include <string>
+
+#include <cutils/properties.h>
 
 #include "android-base/logging.h"
 #include "android-base/parsebool.h"
@@ -62,6 +65,13 @@ void ReadProperty(JNIEnv* env, jstring keyJ, Functor&& functor)
     }
     const prop_info* prop = __system_property_find(key.c_str());
     if (!prop) {
+#if defined(__BIONIC__)
+        std::string property_name(key.c_str());
+        char value[PROP_VALUE_MAX] = {};
+        if (__system_property_read(nullptr, property_name.data(), value) > 0) {
+            std::forward<Functor>(functor)(value);
+        }
+#endif
         return;
     }
     ReadProperty(prop, std::forward<Functor>(functor));
