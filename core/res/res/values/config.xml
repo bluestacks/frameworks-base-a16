@@ -2788,7 +2788,7 @@
 
     <!-- Automatic "network" time detection config: Normal network time polling frequency in
          milliseconds. -->
-    <integer name="config_ntpPollingInterval">64800000</integer>
+    <integer name="config_ntpPollingInterval">3600000</integer>
     <!-- Automatic "network" time detection config: Try-again network time polling interval in
          milliseconds, in case the network request failed -->
     <integer name="config_ntpPollingIntervalShorter">60000</integer>
