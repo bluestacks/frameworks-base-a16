@@ -333,6 +333,11 @@ int main(int argc, char* const argv[])
     }
 
     if (zygote) {
+        property_set("bst.config.pm_ready", "0");
+        property_set("bst.config.top_package_name", "");
+        property_set("bst.config.top_activity_name", "");
+        property_set("bst.config.boot_completed", "0");
+        property_set("bst.config.screen_enabled", "0");
         runtime.start("com.android.internal.os.ZygoteInit", args, zygote);
     } else if (!className.empty()) {
         runtime.start("com.android.internal.os.RuntimeInit", args, zygote);
