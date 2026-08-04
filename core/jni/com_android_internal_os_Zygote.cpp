@@ -2242,6 +2242,15 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, 
                                             nullptr)) == -1) {
             ALOGW("Failed to bind-mount /etc/xcpuinfo as /proc/cpuinfo: %s", strerror(errno));
         }
+
+        if (uid >= AID_APP_START
+                && BstPackageInList(
+                        "/data/downloads/.tmp/.bstNdkTranslationApps", bst_package_name)
+                && TEMP_FAILURE_RETRY(mount("/system/lib64/arm64_ndk", "/system/lib64/arm64",
+                                            nullptr, MS_BIND, nullptr)) == -1) {
+            ALOGW("Failed to bind-mount /system/lib64/arm64_ndk as /system/lib64/arm64: %s",
+                  strerror(errno));
+        }
     }
 
     if (is_system_server && !(runtime_flags & RuntimeFlags::PROFILE_SYSTEM_SERVER)) {
