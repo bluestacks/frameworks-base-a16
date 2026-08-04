@@ -61,6 +61,8 @@ final class PackageAbiHelperImpl implements PackageAbiHelper {
     private static String[] sNativelySupported32BitAbis = null;
     @Nullable
     private static String[] sNativelySupported64BitAbis = null;
+    @Nullable
+    private static String[] sBstAbiListForSystemApps = null;
 
     private static String calculateBundledApkRoot(final String codePathString) {
         final File codePath = new File(codePathString);
@@ -362,6 +364,13 @@ final class PackageAbiHelperImpl implements PackageAbiHelper {
         return sNativelySupported64BitAbis;
     }
 
+    private static String[] getBstAbiListForSystemApps() {
+        if (sBstAbiListForSystemApps == null) {
+            sBstAbiListForSystemApps = NativeLibraryHelper.getAbiListForAbiValue();
+        }
+        return sBstAbiListForSystemApps;
+    }
+
     @Override
     @SuppressWarnings("AndroidFrameworkCompatChange") // the check is before the apk is installed
     public Pair<Abis, NativeLibraryPaths> derivePackageAbi(AndroidPackage pkg, boolean isSystemApp,
@@ -485,6 +494,10 @@ final class PackageAbiHelperImpl implements PackageAbiHelper {
             } else {
                 String[] abiList = (cpuAbiOverride != null)
                         ? new String[]{cpuAbiOverride} : Build.SUPPORTED_ABIS;
+                final String[] bstAbiList = isSystemApp
+                        ? getBstAbiListForSystemApps()
+                        : NativeLibraryHelper.getBstAbiOverride(
+                                pkg.getPath(), pkg.getPackageName());
 
                 // If an app that contains RenderScript has target API level < 21, it needs to run
                 // with 32-bit ABI, and its APK file will contain a ".bc" file.
@@ -513,10 +526,11 @@ final class PackageAbiHelperImpl implements PackageAbiHelper {
                 if (extractLibs) {
                     Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "copyNativeBinaries");
                     copyRet = NativeLibraryHelper.copyNativeBinariesForSupportedAbi(handle,
-                            nativeLibraryRoot, abiList, useIsaSpecificSubdirs, onIncremental);
+                            nativeLibraryRoot, abiList, bstAbiList,
+                            useIsaSpecificSubdirs, onIncremental);
                 } else {
                     Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "findSupportedAbi");
-                    copyRet = NativeLibraryHelper.findSupportedAbi(handle, abiList);
+                    copyRet = NativeLibraryHelper.findSupportedAbi(handle, abiList, bstAbiList);
                 }
                 Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
 
