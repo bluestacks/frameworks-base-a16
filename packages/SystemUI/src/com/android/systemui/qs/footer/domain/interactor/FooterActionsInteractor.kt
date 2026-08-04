@@ -18,11 +18,11 @@ package com.android.systemui.qs.footer.domain.interactor
 
 import android.app.admin.DevicePolicyEventLogger
 import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.UserHandle
-import android.provider.Settings
 import com.android.internal.jank.InteractionJankMonitor
 import com.android.internal.logging.MetricsLogger
 import com.android.internal.logging.UiEventLogger
@@ -187,7 +187,12 @@ constructor(
 
         metricsLogger.action(MetricsProto.MetricsEvent.ACTION_QS_EXPANDED_SETTINGS_LAUNCH)
         activityStarter.startActivity(
-            Intent(Settings.ACTION_SETTINGS),
+            Intent().setComponent(
+                ComponentName(
+                    "com.bluestacks.settings",
+                    "com.bluestacks.settings.SettingsActivity",
+                )
+            ),
             true /* dismissShade */,
             expandable.activityTransitionController(
                 InteractionJankMonitor.CUJ_SHADE_APP_LAUNCH_FROM_SETTINGS_BUTTON

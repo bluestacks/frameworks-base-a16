@@ -17,7 +17,6 @@
 package com.android.systemui.qs.footer.ui.viewmodel
 
 import android.content.Context
-import android.util.Log
 import android.view.ContextThemeWrapper
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
@@ -36,7 +35,6 @@ import com.android.systemui.qs.dagger.QSFlagsModule.PM_LITE_ENABLED
 import com.android.systemui.qs.footer.data.model.UserSwitcherStatusModel
 import com.android.systemui.qs.footer.domain.interactor.FooterActionsInteractor
 import com.android.systemui.qs.footer.domain.model.SecurityButtonConfig
-import com.android.systemui.qs.footer.ui.viewmodel.FooterActionsButtonViewModel.PowerActionViewModel
 import com.android.systemui.qs.footer.ui.viewmodel.FooterActionsButtonViewModel.SettingsActionViewModel
 import com.android.systemui.qs.footer.ui.viewmodel.FooterActionsButtonViewModel.UserSwitcherViewModel
 import com.android.systemui.qs.panels.domain.interactor.TextFeedbackInteractor
@@ -303,12 +301,7 @@ fun createFooterActionsViewModel(
             }
             .distinctUntilChanged()
 
-    val power =
-        if (showPowerButton) {
-            PowerActionViewModel(qsThemedContext, ::onPowerButtonClicked)
-        } else {
-            null
-        }
+    val power: FooterActionsButtonViewModel? = null
 
     val textFeedback = textFeedbackInteractor.textFeedback.map { it.load(qsThemedContext) }
 
@@ -332,22 +325,7 @@ fun userSwitcherViewModel(
         .map { userSwitcherStatus ->
             when (userSwitcherStatus) {
                 UserSwitcherStatusModel.Disabled -> null
-                is UserSwitcherStatusModel.Enabled -> {
-                    if (userSwitcherStatus.currentUserImage == null) {
-                        Log.e(
-                            TAG,
-                            "Skipped the addition of user switcher button because " +
-                                "currentUserImage is missing",
-                        )
-                        return@map null
-                    }
-
-                    userSwitcherButtonViewModel(
-                        themedContext,
-                        userSwitcherStatus,
-                        onUserSwitcherClicked,
-                    )
-                }
+                is UserSwitcherStatusModel.Enabled -> null
             }
         }
         .distinctUntilChanged()
