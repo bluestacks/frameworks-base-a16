@@ -109,6 +109,7 @@ import android.os.ResultReceiver;
 import android.os.ShellCallback;
 import android.os.ShellCommand;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -2942,7 +2943,12 @@ public final class InputMethodManagerService implements IInputMethodManagerImpl.
         }
         final long ident = Binder.clearCallingIdentity();
         try {
+            final String previousImeId = bindingController.getSelectedMethodId();
             setSelectedInputMethodAndSubtypeLocked(info, subtypeIndex, false, userId);
+            if ("com.android.inputmethod.latin/.LatinIME".equals(previousImeId)
+                    && !id.equals(previousImeId)) {
+                SystemProperties.set("bst.config.ime_listenerport", "0");
+            }
             // mCurMethodId should be updated after setSelectedInputMethodAndSubtypeLocked()
             // because mCurMethodId is stored as a history in
             // setSelectedInputMethodAndSubtypeLocked().
