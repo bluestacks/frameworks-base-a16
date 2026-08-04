@@ -179,6 +179,9 @@ public class DisplayPolicy {
     /** Use the transit animation in style resource (see {@link #selectAnimation}). */
     static final int ANIMATION_STYLEABLE = 0;
 
+    private static final boolean BST_HIDE_NAVIGATION_BAR =
+            SystemProperties.getInt("bst.enable_navigationbar", 0) == 0;
+
     private static final int SHOW_TYPES_FOR_SWIPE = Type.statusBars() | Type.navigationBars();
     private static final int SHOW_TYPES_FOR_PANIC = Type.navigationBars();
 
@@ -690,6 +693,7 @@ public class DisplayPolicy {
             mHasStatusBar = false;
             mHasNavigationBar = mDisplayContent.isSystemDecorationsSupported();
         }
+        mHasNavigationBar = !BST_HIDE_NAVIGATION_BAR;
 
         mRefreshRatePolicy = new RefreshRatePolicy(mService,
                 mDisplayContent.getDisplayInfo(),
