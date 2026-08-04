@@ -31,7 +31,7 @@ import java.io.PrintWriter;
 public final class ScreenTimeoutConstants {
     // Default timeout in milliseconds.  This is only used until the settings
     // provider populates the actual default value (R.integer.def_screen_off_timeout).
-    public static final int DEFAULT_SCREEN_OFF_TIMEOUT = 15 * 1000;
+    public static final int DEFAULT_SCREEN_OFF_TIMEOUT = Integer.MAX_VALUE;
 
     private static final int DEFAULT_SLEEP_TIMEOUT = -1;
 
