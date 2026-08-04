@@ -409,6 +409,7 @@ import android.accounts.AccountManager;
 
 import com.bluestacks.os.BstFilterAppsManager;
 import com.bluestacks.os.BstHostCallManager;
+import com.bluestacks.os.BstUtilsManager;
 
 
 /** @hide */
@@ -1144,6 +1145,9 @@ public class WindowManagerService extends IWindowManager.Stub
     // R255 / Henry bstSendTopDisplayedOnFocusChange
     final BstFilterAppsManager mBstFilterApps;
     final BstHostCallManager mBstHostCallManagerService;
+    private boolean mBstSpecialAppKeyboardHandlingEnabled;
+    private boolean mBstHeadsetPlugged;
+    private String mBstPreviousCallingPackage = "";
 
     /** Indicates whether this device supports wide color gamut / HDR rendering */
     private boolean mHasWideColorGamutSupport;
@@ -6970,24 +6974,117 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
+    private void handleBstImeForSpecialApps(String packageName, String activityName,
+            @Nullable String callingPackage) {
+        if (mBstFilterApps == null) {
+            return;
+        }
+
+        final BstUtilsManager bstUtils;
+        try {
+            bstUtils = (BstUtilsManager) mContext.getSystemService(Context.BST_UTILS);
+        } catch (RuntimeException e) {
+            Slog.w(TAG, "BST_UTILS unavailable", e);
+            return;
+        }
+        if (bstUtils == null) {
+            return;
+        }
+
+        try {
+            if (callingPackage != null && !callingPackage.trim().isEmpty()
+                    && !callingPackage.equalsIgnoreCase(mBstPreviousCallingPackage)
+                    && !packageName.equalsIgnoreCase(callingPackage)) {
+                mBstPreviousCallingPackage = callingPackage;
+            }
+
+            final boolean isSoftKeyboardRequired =
+                    mBstFilterApps.isSoftKeyboardRequired(packageName, activityName)
+                    || mBstFilterApps.isSoftKeyboardRequired(
+                            mBstPreviousCallingPackage, activityName);
+            final boolean isSoftKeyboardEnabled = bstUtils.isBstSoftKeyboardEnabled();
+            if (isSoftKeyboardRequired) {
+                final String modifier = mBstFilterApps.getSoftKeyboardModifier(packageName);
+                final String inputMethod = Settings.Secure.getString(
+                        mContext.getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD);
+                if ("com.android.inputmethod.latin/.LatinIME".equals(inputMethod)
+                        && ("hard".equals(modifier) || "pass".equals(modifier))) {
+                    if (isSoftKeyboardEnabled) {
+                        bstUtils.setBstSoftKeyboardStatus(false);
+                        mBstSpecialAppKeyboardHandlingEnabled = false;
+                    }
+                } else if (!isSoftKeyboardEnabled) {
+                    bstUtils.setBstSoftKeyboardStatus(true);
+                    mBstSpecialAppKeyboardHandlingEnabled = true;
+                }
+            } else if (mBstSpecialAppKeyboardHandlingEnabled && isSoftKeyboardEnabled) {
+                bstUtils.setBstSoftKeyboardStatus(false);
+                mBstSpecialAppKeyboardHandlingEnabled = false;
+            }
+        } catch (RuntimeException e) {
+            Slog.w(TAG, "Unable to update BlueStacks soft keyboard policy", e);
+        }
+    }
+
+    private void sendBstHeadsetIntent(String packageName) {
+        if (mBstFilterApps == null || packageName.isEmpty()) {
+            return;
+        }
+
+        try {
+            final boolean plugged = mBstFilterApps.isHeadsetRequired(packageName);
+            if (plugged == mBstHeadsetPlugged) {
+                return;
+            }
+
+            final Intent intent = new Intent(Intent.ACTION_HEADSET_PLUG)
+                    .addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY)
+                    .putExtra("state", plugged ? 1 : 0)
+                    .putExtra("name", "BlueStacks")
+                    .putExtra("microphone", plugged ? 1 : 0);
+            ActivityManager.broadcastStickyIntent(intent, UserHandle.myUserId());
+            mBstHeadsetPlugged = plugged;
+        } catch (RuntimeException e) {
+            Slog.w(TAG, "Unable to update BlueStacks headset policy", e);
+        }
+    }
+
+    /** Updates app-player state as soon as an activity launch is resolved. */
+    void bstOnDisplayedPackageChange(String packageName, String activityName,
+            @Nullable String callingPackage) {
+        if (packageName == null || packageName.isEmpty()
+                || activityName == null || activityName.isEmpty()) {
+            return;
+        }
+
+        handleBstImeForSpecialApps(packageName, activityName, callingPackage);
+
+        final int maxLength = SystemProperties.PROP_VALUE_MAX;
+        final String trimmedPackageName = packageName.length() > maxLength
+                ? packageName.substring(0, maxLength) : packageName;
+        final String trimmedActivityName = activityName.length() > maxLength
+                ? activityName.substring(0, maxLength) : activityName;
+        final String trimmedCallingPackage = callingPackage != null
+                && callingPackage.length() > maxLength
+                ? callingPackage.substring(0, maxLength) : callingPackage;
+
+        SystemProperties.set("bst.config.top_package_name", trimmedPackageName);
+        SystemProperties.set("bst.config.top_activity_name", trimmedActivityName);
+        final String previousCallingPackage =
+                SystemProperties.get("bst.config.calling_package", "");
+        if (trimmedCallingPackage != null && !trimmedCallingPackage.isEmpty()
+                && !trimmedCallingPackage.equals(previousCallingPackage)) {
+            SystemProperties.set("bst.config.calling_package", trimmedCallingPackage);
+        }
+
+        sendBstHeadsetIntent(packageName);
+    }
+
     void bstNotifyActivityDisplayed(ActivityRecord activityRecord) {
         if (activityRecord == null) {
             return;
         }
         stopBstSignInPopupService(activityRecord.mUserId);
-
-        BstHostCallManager hostCall = mBstHostCallManagerService;
-        if (hostCall == null) {
-            try {
-                hostCall = (BstHostCallManager) mContext.getSystemService(Context.BST_HOST_CALL);
-            } catch (Exception e) {
-                Slog.w(TAG, "R259: BST_HOST_CALL unavailable: " + e);
-                return;
-            }
-            if (hostCall == null) {
-                return;
-            }
-        }
 
         String packageName = activityRecord.packageName;
         String activityName = null;
@@ -7003,6 +7100,8 @@ public class WindowManagerService extends IWindowManager.Stub
         if (activityName == null || activityName.isEmpty()) {
             activityName = packageName;
         }
+        bstOnDisplayedPackageChange(
+                packageName, activityName, activityRecord.launchedFromPackage);
         if (activityName.equalsIgnoreCase("com.android.settings.FallbackHome")) {
             return;
         }
@@ -7017,6 +7116,19 @@ public class WindowManagerService extends IWindowManager.Stub
                 SystemProperties.get("bst.config.top_displayed_pkg", "");
         if (packageName.equalsIgnoreCase(lastTopDisplayedPackage)) {
             return;
+        }
+
+        BstHostCallManager hostCall = mBstHostCallManagerService;
+        if (hostCall == null) {
+            try {
+                hostCall = (BstHostCallManager) mContext.getSystemService(Context.BST_HOST_CALL);
+            } catch (Exception e) {
+                Slog.w(TAG, "R259: BST_HOST_CALL unavailable: " + e);
+                return;
+            }
+            if (hostCall == null) {
+                return;
+            }
         }
 
         try {

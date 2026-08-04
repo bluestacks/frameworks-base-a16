@@ -1508,6 +1508,10 @@ class ActivityStarter {
                 callerApp = wpc;
             }
         }
+        if (mService.mWindowManager != null) {
+            mService.mWindowManager.bstOnDisplayedPackageChange(
+                    aInfo.applicationInfo.packageName, aInfo.name, callingPackage);
+        }
         final ActivityRecord r = new ActivityRecord.Builder(mService)
                 .setCaller(callerApp)
                 .setLaunchedFromPid(callingPid)
