@@ -40,6 +40,8 @@ import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.PointerIconType;
+import android.os.SystemProperties;
+import android.provider.Settings;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.flags.Flags;
@@ -255,6 +257,14 @@ public final class PointerIcon implements Parcelable {
             // system icon. To avoid changing the public API, we keep the context parameter
             // requirement.
             throw new IllegalArgumentException("context must not be null");
+        }
+
+        final boolean showTouches = Settings.System.getInt(context.getContentResolver(),
+                Settings.System.SHOW_TOUCHES, 0) == 1;
+        final boolean showNativeMousePointer = SystemProperties.getBoolean(
+                "bst.config.show_mouse_ptr", false);
+        if (!showTouches && !showNativeMousePointer) {
+            return getSystemIcon(TYPE_NULL);
         }
         return getSystemIcon(type);
     }

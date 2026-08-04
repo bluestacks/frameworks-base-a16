@@ -1171,6 +1171,15 @@ public final class InputManager {
         }
     }
 
+    /** @hide */
+    public void bstReloadPointerIcon() {
+        try {
+            mIm.bstReloadPointerIcon();
+        } catch (RemoteException ex) {
+            throw ex.rethrowFromSystemServer();
+        }
+    }
+
     /**
      * Add a runtime association between the input port and display, by unique id. Input ports are
      * expected to be unique.

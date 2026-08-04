@@ -1860,6 +1860,11 @@ public class InputManagerService extends IInputManager.Stub
     }
 
     @Override // Binder call
+    public void bstReloadPointerIcon() {
+        mNative.reloadPointerIcons();
+    }
+
+    @Override // Binder call
     public void addUniqueIdAssociationByPort(@NonNull String inputPort,
             @NonNull String displayUniqueId) {
         if (!checkCallingPermission(

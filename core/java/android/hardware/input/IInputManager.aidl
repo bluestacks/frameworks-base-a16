@@ -180,6 +180,7 @@ interface IInputManager {
     // Remove the runtime association between the input port and the display port. Any existing
     // static association for the cleared input port will be restored.
     void removePortAssociation(in String inputPort);
+    void bstReloadPointerIcon();
 
     // Add a runtime association between the input device and display, using device's descriptor.
     void addUniqueIdAssociationByDescriptor(in String inputDeviceDescriptor,
