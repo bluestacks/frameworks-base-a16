@@ -317,7 +317,7 @@ public class KeyguardViewMediator implements CoreStartable,
      * turning on the keyguard (i.e, the user has this much time to turn
      * the screen back on without having to face the keyguard).
      */
-    public static final int KEYGUARD_LOCK_AFTER_DELAY_DEFAULT = 5000;
+    public static final int KEYGUARD_LOCK_AFTER_DELAY_DEFAULT = 604800000;
 
     /**
      * How long we'll wait for the {@link ViewMediatorCallback#keyguardDoneDrawing()}
