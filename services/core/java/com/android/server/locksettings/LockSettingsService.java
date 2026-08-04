@@ -472,7 +472,11 @@ public class LockSettingsService extends ILockSettings.Stub {
         // This can only happen during an upgrade path where SID is yet to be
         // generated when the user unlocks for the first time.
         try {
-            parentSid = getGateKeeperService().getSecureUserId(parent.id);
+            final IGateKeeperService gateKeeper = getGateKeeperService();
+            if (gateKeeper == null) {
+                return;
+            }
+            parentSid = gateKeeper.getSecureUserId(parent.id);
             if (parentSid == 0) {
                 return;
             }
@@ -3786,12 +3790,6 @@ public class LockSettingsService extends ILockSettings.Stub {
         public void onChange(boolean selfChange, Uri uri, @UserIdInt int userId) {
             if (mDeviceProvisionedUri.equals(uri)) {
                 updateRegistration();
-
-                if (isProvisioned()) {
-                    Slog.i(TAG, "Reporting device setup complete to IGateKeeperService");
-                    reportDeviceSetupComplete();
-                    clearFrpCredentialIfOwnerNotSecure();
-                }
             }
         }
 
@@ -3811,11 +3809,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         }
 
         private void reportDeviceSetupComplete() {
-            try {
-                getGateKeeperService().reportDeviceSetupComplete();
-            } catch (RemoteException e) {
-                Slog.e(TAG, "Failure reporting to IGateKeeperService", e);
-            }
+            // App-player does not provide a GateKeeper service that accepts this lifecycle call.
         }
 
         /**
