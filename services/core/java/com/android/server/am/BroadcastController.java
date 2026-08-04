@@ -893,7 +893,7 @@ class BroadcastController {
                     affiliateIntent.setAction("com.bluestacks.home.AFFILIATE_HANDLER_HTML");
                     affiliateIntent.putExtra("app_pkg", packageName);
                     affiliateIntent.putExtra("referrer_only", "true");
-                    affiliateIntent.putExtra("WINDOWS_SOURCE", "packageEnqueued");
+                    affiliateIntent.putExtra("WINDOWS_SOURCE", "play_store");
                     mService.mServices.startServiceLocked(null, affiliateIntent, null, 0,
                             SYSTEM_UID, false, "android", null, userId,
                             BackgroundStartPrivileges.NONE);
