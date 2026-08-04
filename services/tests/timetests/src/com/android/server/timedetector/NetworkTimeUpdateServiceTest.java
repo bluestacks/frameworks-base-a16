@@ -536,6 +536,37 @@ public class NetworkTimeUpdateServiceTest {
                 timeResult.getElapsedRealtimeMillis() + expectedDelayMillis);
     }
 
+    @Test
+    public void engineImpl_forceRefreshAndReschedule_refreshesLatestEvenIfFresh() {
+        mFakeElapsedRealtimeClock.setElapsedRealtimeMillis(ARBITRARY_ELAPSED_REALTIME_MILLIS);
+
+        int normalPollingIntervalMillis = 7777777;
+        int shortPollingIntervalMillis = 3333;
+        int tryAgainTimesMax = 5;
+        NetworkTimeUpdateService.Engine engine = new NetworkTimeUpdateService.EngineImpl(
+                mFakeElapsedRealtimeClock,
+                normalPollingIntervalMillis, shortPollingIntervalMillis, tryAgainTimesMax,
+                mMockNtpTrustedTime);
+
+        NtpTrustedTime.TimeResult initialTimeResult = createNtpTimeResult(
+                mFakeElapsedRealtimeClock.getElapsedRealtimeMillis());
+        mFakeElapsedRealtimeClock.incrementMillis(shortPollingIntervalMillis / 2);
+        NtpTrustedTime.TimeResult refreshedTimeResult = createNtpTimeResult(
+                mFakeElapsedRealtimeClock.getElapsedRealtimeMillis());
+        when(mMockNtpTrustedTime.getCachedTimeResult())
+                .thenReturn(initialTimeResult, refreshedTimeResult);
+        when(mMockNtpTrustedTime.forceRefresh(mDummyNetwork)).thenReturn(true);
+
+        RefreshCallbacks mockCallback = mock(RefreshCallbacks.class);
+        engine.forceRefreshAndReschedule(
+                mDummyNetwork, "BlueStacks periodic refresh", mockCallback);
+
+        verify(mMockNtpTrustedTime).forceRefresh(mDummyNetwork);
+        verify(mockCallback).submitSuggestion(createExpectedSuggestion(refreshedTimeResult));
+        verify(mockCallback).scheduleNextRefresh(
+                refreshedTimeResult.getElapsedRealtimeMillis() + normalPollingIntervalMillis);
+    }
+
     /**
      * Confirms that if a refreshAndRescheduleIfRequired() call is made, e.g. for reasons besides
      * scheduled alerts, and the latest time is too old, then an NTP refresh will be attempted.

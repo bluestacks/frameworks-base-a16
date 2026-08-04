@@ -69,6 +69,10 @@ public class NetworkTimeUpdateService extends Binder {
     private static final String TAG = "NetworkTimeUpdateService";
     private static final boolean DBG = false;
 
+    // BlueStacks periodically refreshes host-facing wall clock data even when the cached NTP
+    // result is still fresh according to Android's normal polling interval.
+    private static final long BST_PERIODIC_REFRESH_INTERVAL_MILLIS = 30 * 60 * 1000L;
+
     private final Object mLock = new Object();
     private final Context mContext;
     private final ConnectivityManager mCM;
@@ -143,6 +147,9 @@ public class NetworkTimeUpdateService extends Binder {
                 new AutoTimeSettingObserver(mHandler, mContext);
         resolver.registerContentObserver(Settings.Global.getUriFor(Settings.Global.AUTO_TIME),
                 false, autoTimeSettingObserver);
+
+        mHandler.postDelayed(
+                new BstPeriodicRefreshRunnable(), BST_PERIODIC_REFRESH_INTERVAL_MILLIS);
     }
 
     /**
@@ -179,15 +186,26 @@ public class NetworkTimeUpdateService extends Binder {
 
         final long token = Binder.clearCallingIdentity();
         try {
-            Network network;
-            synchronized (mLock) {
-                network = mDefaultNetwork;
-            }
-            if (network == null) return false;
-
-            return mEngine.forceRefreshForTests(network, mRefreshCallbacks);
+            return forceRefresh("forced refresh for tests");
         } finally {
             Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    private boolean forceRefresh(@NonNull String reason) {
+        Network network;
+        synchronized (mLock) {
+            network = mDefaultNetwork;
+        }
+        if (network == null) {
+            return false;
+        }
+
+        mWakeLock.acquire();
+        try {
+            return mEngine.forceRefresh(network, reason, mRefreshCallbacks);
+        } finally {
+            mWakeLock.release();
         }
     }
 
@@ -200,6 +218,20 @@ public class NetworkTimeUpdateService extends Binder {
         mWakeLock.acquire();
         try {
             mEngine.refreshAndRescheduleIfRequired(network, reason, mRefreshCallbacks);
+        } finally {
+            mWakeLock.release();
+        }
+    }
+
+    private void onForcedPollNetworkTime(@NonNull String reason) {
+        Network network;
+        synchronized (mLock) {
+            network = mDefaultNetwork;
+        }
+
+        mWakeLock.acquire();
+        try {
+            mEngine.forceRefreshAndReschedule(network, reason, mRefreshCallbacks);
         } finally {
             mWakeLock.release();
         }
@@ -219,6 +251,14 @@ public class NetworkTimeUpdateService extends Binder {
         @Override
         public void run() {
             onPollNetworkTime("scheduled refresh");
+        }
+    }
+
+    private class BstPeriodicRefreshRunnable implements Runnable {
+        @Override
+        public void run() {
+            mHandler.postDelayed(this, BST_PERIODIC_REFRESH_INTERVAL_MILLIS);
+            onForcedPollNetworkTime("BlueStacks periodic refresh");
         }
     }
 
@@ -306,12 +346,11 @@ public class NetworkTimeUpdateService extends Binder {
         }
 
         /**
-         * Forces the engine to refresh the network time (for tests). See {@link
-         * NetworkTimeUpdateService#forceRefreshForTests()}. This is a blocking call. This method
+         * Forces the engine to refresh the network time. This is a blocking call. This method
          * must not schedule any calls.
          */
-        boolean forceRefreshForTests(
-                @NonNull Network network, @NonNull RefreshCallbacks refreshCallbacks);
+        boolean forceRefresh(@NonNull Network network, @NonNull String reason,
+                @NonNull RefreshCallbacks refreshCallbacks);
 
         /**
          * Attempts to refresh the network time if required, i.e. if there isn't a recent-enough
@@ -321,6 +360,10 @@ public class NetworkTimeUpdateService extends Binder {
          * @param reason the reason for the refresh (for logging)
          */
         void refreshAndRescheduleIfRequired(@Nullable Network network, @NonNull String reason,
+                @NonNull RefreshCallbacks refreshCallbacks);
+
+        /** Forces a refresh and then applies the normal suggestion and rescheduling policy. */
+        void forceRefreshAndReschedule(@Nullable Network network, @NonNull String reason,
                 @NonNull RefreshCallbacks refreshCallbacks);
 
         void dump(@NonNull PrintWriter pw);
@@ -409,19 +452,20 @@ public class NetworkTimeUpdateService extends Binder {
         }
 
         @Override
-        public boolean forceRefreshForTests(
-                @NonNull Network network, @NonNull RefreshCallbacks refreshCallbacks) {
+        public boolean forceRefresh(@NonNull Network network, @NonNull String reason,
+                @NonNull RefreshCallbacks refreshCallbacks) {
             boolean refreshSuccessful = tryRefresh(network);
-            logToDebugAndDumpsys("forceRefreshForTests: refreshSuccessful=" + refreshSuccessful);
+            logToDebugAndDumpsys("forceRefresh: reason=" + reason
+                    + ", refreshSuccessful=" + refreshSuccessful);
 
             if (refreshSuccessful) {
                 TimeResult cachedTimeResult = mNtpTrustedTime.getCachedTimeResult();
                 if (cachedTimeResult == null) {
-                    logToDebugAndDumpsys(
-                            "forceRefreshForTests: cachedTimeResult unexpectedly null");
+                    logToDebugAndDumpsys("forceRefresh: reason=" + reason
+                            + ", cachedTimeResult unexpectedly null");
                 } else {
                     makeNetworkTimeSuggestion(cachedTimeResult,
-                            "EngineImpl.forceRefreshForTests()", refreshCallbacks);
+                            "EngineImpl.forceRefresh(): reason=" + reason, refreshCallbacks);
                 }
             }
             return refreshSuccessful;
@@ -430,6 +474,19 @@ public class NetworkTimeUpdateService extends Binder {
         @Override
         public void refreshAndRescheduleIfRequired(
                 @Nullable Network network, @NonNull String reason,
+                @NonNull RefreshCallbacks refreshCallbacks) {
+            refreshAndReschedule(network, reason, false, refreshCallbacks);
+        }
+
+        @Override
+        public void forceRefreshAndReschedule(
+                @Nullable Network network, @NonNull String reason,
+                @NonNull RefreshCallbacks refreshCallbacks) {
+            refreshAndReschedule(network, reason, true, refreshCallbacks);
+        }
+
+        private void refreshAndReschedule(
+                @Nullable Network network, @NonNull String reason, boolean forceRefresh,
                 @NonNull RefreshCallbacks refreshCallbacks) {
             if (network == null) {
                 // If we don't have any default network, don't do anything: When a new network
@@ -454,9 +511,9 @@ public class NetworkTimeUpdateService extends Binder {
                 // calculateTimeResultAgeMillis() safely handles a null initialTimeResult.
                 long timeResultAgeMillis = calculateTimeResultAgeMillis(
                         initialTimeResult, currentElapsedRealtimeMillis);
-                shouldAttemptRefresh =
-                        timeResultAgeMillis >= mNormalPollingIntervalMillis
-                        && isRefreshAllowed(currentElapsedRealtimeMillis);
+                shouldAttemptRefresh = forceRefresh
+                        || (timeResultAgeMillis >= mNormalPollingIntervalMillis
+                        && isRefreshAllowed(currentElapsedRealtimeMillis));
             }
 
             boolean refreshSuccessful = false;
@@ -604,6 +661,7 @@ public class NetworkTimeUpdateService extends Binder {
                 logToDebugAndDumpsys("refreshIfRequiredAndReschedule:"
                         + " network=" + network
                         + ", reason=" + reason
+                        + ", forceRefresh=" + forceRefresh
                         + ", initialTimeResult=" + initialTimeResult
                         + ", shouldAttemptRefresh=" + shouldAttemptRefresh
                         + ", refreshSuccessful=" + refreshSuccessful
