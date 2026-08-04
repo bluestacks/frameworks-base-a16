@@ -118,10 +118,7 @@ public class ClipboardListener implements
 
     @Override
     public void start() {
-        if (clipboardOverlayMultiuser()) {
-            mUserTracker.addCallback(mCallback, mMainExecutor);
-        }
-        mClipboardManagerForUser.addPrimaryClipChangedListener(this);
+        // The clipboard overlay is not used by app-player.
     }
 
     @Override
@@ -177,13 +174,7 @@ public class ClipboardListener implements
     @VisibleForTesting
     static boolean shouldSuppressOverlay(ClipData clipData, String clipSource,
             boolean isEmulator) {
-        if (!(isEmulator || SHELL_PACKAGE.equals(clipSource))) {
-            return false;
-        }
-        if (clipData == null || clipData.getDescription().getExtras() == null) {
-            return false;
-        }
-        return clipData.getDescription().getExtras().getBoolean(EXTRA_SUPPRESS_OVERLAY, false);
+        return true;
     }
 
     boolean shouldShowToast(ClipData clipData) {
