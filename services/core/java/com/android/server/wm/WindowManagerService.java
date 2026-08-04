@@ -6927,7 +6927,7 @@ public class WindowManagerService extends IWindowManager.Stub
         if (activityRecord == null) {
             return;
         }
-        bstNotifyActivityDisplayed(activityRecord);
+        bstNotifyActivityDisplayed(activityRecord, newFocus);
     }
 
 
@@ -7080,7 +7080,42 @@ public class WindowManagerService extends IWindowManager.Stub
         sendBstHeadsetIntent(packageName);
     }
 
+    private void updateBstMouseAction(BstHostCallManager hostCall, String packageName,
+            String activityName, @Nullable WindowState focusedWindow) {
+        if (hostCall == null || mBstFilterApps == null) {
+            return;
+        }
+
+        try {
+            String mouseAction = mBstFilterApps.getMouseAction(packageName, activityName);
+            if ("com.roblox.client".equals(packageName) && focusedWindow != null) {
+                final int systemUiVisibility =
+                        focusedWindow.mAttrs.subtreeSystemUiVisibility;
+                mouseAction = (systemUiVisibility & View.SYSTEM_UI_FLAG_FULLSCREEN)
+                        == View.SYSTEM_UI_FLAG_FULLSCREEN ? "enableNative" : "";
+            }
+
+            final String lastSentMouseAction =
+                    SystemProperties.get("bst.config.last_mouse_action", "");
+            if (!mouseAction.isEmpty() || !lastSentMouseAction.isEmpty()) {
+                final int result =
+                        hostCall.onSetMouseAction(packageName, activityName, mouseAction);
+                SystemProperties.set("bst.config.last_mouse_action", mouseAction);
+                if (result != 0) {
+                    Slog.w(TAG, "P2 onSetMouseAction rval=" + result);
+                }
+            }
+        } catch (RuntimeException e) {
+            Slog.w(TAG, "Unable to update BlueStacks mouse action", e);
+        }
+    }
+
     void bstNotifyActivityDisplayed(ActivityRecord activityRecord) {
+        bstNotifyActivityDisplayed(activityRecord, null);
+    }
+
+    private void bstNotifyActivityDisplayed(ActivityRecord activityRecord,
+            @Nullable WindowState focusedWindow) {
         if (activityRecord == null) {
             return;
         }
@@ -7102,6 +7137,17 @@ public class WindowManagerService extends IWindowManager.Stub
         }
         bstOnDisplayedPackageChange(
                 packageName, activityName, activityRecord.launchedFromPackage);
+
+        BstHostCallManager hostCall = mBstHostCallManagerService;
+        if (hostCall == null) {
+            try {
+                hostCall = (BstHostCallManager) mContext.getSystemService(Context.BST_HOST_CALL);
+            } catch (RuntimeException e) {
+                Slog.w(TAG, "R259: BST_HOST_CALL unavailable", e);
+            }
+        }
+        updateBstMouseAction(hostCall, packageName, activityName, focusedWindow);
+
         if (activityName.equalsIgnoreCase("com.android.settings.FallbackHome")) {
             return;
         }
@@ -7117,18 +7163,8 @@ public class WindowManagerService extends IWindowManager.Stub
         if (packageName.equalsIgnoreCase(lastTopDisplayedPackage)) {
             return;
         }
-
-        BstHostCallManager hostCall = mBstHostCallManagerService;
         if (hostCall == null) {
-            try {
-                hostCall = (BstHostCallManager) mContext.getSystemService(Context.BST_HOST_CALL);
-            } catch (Exception e) {
-                Slog.w(TAG, "R259: BST_HOST_CALL unavailable: " + e);
-                return;
-            }
-            if (hostCall == null) {
-                return;
-            }
+            return;
         }
 
         try {
@@ -7143,7 +7179,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 Slog.w(TAG, "R259 onActivityDisplayed rval=" + rval);
             }
 
-            // P2 BatchC: app-config + mouse (fail-open)
+            // P2 BatchC: app-config (fail-open)
             try {
                 if (mBstFilterApps != null) {
                     boolean macrosDisabled = mBstFilterApps.isMacrosDisabledApp(packageName);
@@ -7155,19 +7191,9 @@ public class WindowManagerService extends IWindowManager.Stub
                     if (cfg != 0) {
                         Slog.w(TAG, "P2 setAppConfigDbParams rval=" + cfg);
                     }
-                    String mouseAction = mBstFilterApps.getMouseAction(packageName, activityName);
-                    String lastSentMouseAction =
-                            SystemProperties.get("bst.config.last_mouse_action", "");
-                    if (!mouseAction.isEmpty() || !lastSentMouseAction.isEmpty()) {
-                        int mr = hostCall.onSetMouseAction(packageName, activityName, mouseAction);
-                        SystemProperties.set("bst.config.last_mouse_action", mouseAction);
-                        if (mr != 0) {
-                            Slog.w(TAG, "P2 onSetMouseAction rval=" + mr);
-                        }
-                    }
                 }
             } catch (Exception cfgEx) {
-                Slog.w(TAG, "P2 appconfig/mouse after ActivityDisplayed: " + cfgEx);
+                Slog.w(TAG, "P2 appconfig after ActivityDisplayed: " + cfgEx);
             }
         } catch (Exception ex) {
             Slog.w(TAG, "R259 bstNotifyActivityDisplayed failed: " + ex);
