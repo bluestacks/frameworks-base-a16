@@ -45,6 +45,7 @@
 namespace android::uirenderer {
 
 static constexpr auto kThreadTimeout = 60000_ms;
+static JVMAttachOrDetachHook gOnJVMHook = nullptr;
 
 class AHBUploader;
 // This helper uploader classes allows us to upload using either EGL or Vulkan using the same
@@ -67,6 +68,7 @@ public:
         std::lock_guard _lock{mLock};
         LOG_ALWAYS_FATAL_IF(mPendingUploads, "terminate called while uploads in progress");
         if (mUploadThread) {
+            attachOrDetachUploadThread(true);
             mUploadThread->requestExit();
             mUploadThread->join();
             mUploadThread = nullptr;
@@ -85,6 +87,16 @@ public:
 
     void postIdleTimeoutCheck() {
         mUploadThread->queue().postDelayed(kThreadTimeout, [this]() { this->idleTimeoutCheck(); });
+    }
+
+    void attachOrDetachUploadThread(bool detach = false) {
+        auto hook = HardwareBitmapUploader::getOnJVMHook();
+        if (!mUploadThread || !hook) {
+            return;
+        }
+
+        mUploadThread->queue().runSync(
+                [hook, detach]() { hook("GrallocUploadThread", detach); });
     }
 
 protected:
@@ -122,6 +134,7 @@ private:
         }
         if (!mUploadThread->isRunning()) {
             mUploadThread->start("GrallocUploadThread");
+            attachOrDetachUploadThread();
         }
 
         onBeginUpload();
@@ -484,6 +497,14 @@ void HardwareBitmapUploader::terminate() {
     if (sUploader) {
         sUploader->destroy();
     }
+}
+
+void HardwareBitmapUploader::setOnJVMHook(JVMAttachOrDetachHook onJVMHook) {
+    gOnJVMHook = onJVMHook;
+}
+
+JVMAttachOrDetachHook HardwareBitmapUploader::getOnJVMHook() {
+    return gOnJVMHook;
 }
 
 }  // namespace android::uirenderer

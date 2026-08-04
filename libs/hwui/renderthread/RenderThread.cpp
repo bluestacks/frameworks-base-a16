@@ -146,9 +146,11 @@ bool RenderThread::hasInstance() {
     return gHasRenderThreadInstance;
 }
 
-void RenderThread::setOnStartHook(JVMAttachHook onStartHook) {
+void RenderThread::setOnStartHook(JVMAttachHook onStartHook,
+                                  JVMAttachOrDetachHook onUploaderStartHook) {
     LOG_ALWAYS_FATAL_IF(hasInstance(), "can't set an onStartHook after we've started...");
     gOnStartHook = onStartHook;
+    HardwareBitmapUploader::setOnJVMHook(onUploaderStartHook);
 }
 
 JVMAttachHook RenderThread::getOnStartHook() {

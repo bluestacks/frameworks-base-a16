@@ -23,10 +23,15 @@ class SkBitmap;
 
 namespace android::uirenderer {
 
+using JVMAttachOrDetachHook = void (*)(const char* name, bool detach);
+
 class HardwareBitmapUploader {
 public:
     static void initialize();
     static void terminate();
+
+    static void setOnJVMHook(JVMAttachOrDetachHook onJVMHook);
+    static JVMAttachOrDetachHook getOnJVMHook();
 
     static sk_sp<Bitmap> allocateHardwareBitmap(const SkBitmap& sourceBitmap);
 

@@ -81,13 +81,15 @@ class ChoreographerSource;
 class DummyVsyncSource;
 
 typedef void (*JVMAttachHook)(const char* name);
+typedef void (*JVMAttachOrDetachHook)(const char* name, bool detach);
 
 class RenderThread : private ThreadBase {
     PREVENT_COPY_AND_ASSIGN(RenderThread);
 
 public:
     // Sets a callback that fires before any RenderThread setup has occurred.
-    static void setOnStartHook(JVMAttachHook onStartHook);
+    static void setOnStartHook(JVMAttachHook onStartHook,
+                               JVMAttachOrDetachHook onUploaderStartHook);
     static JVMAttachHook getOnStartHook();
 
     WorkQueue& queue() { return ThreadBase::queue(); }

@@ -1105,9 +1105,25 @@ static void attachRenderThreadToJvm(const char* name) {
     mJvm->AttachCurrentThreadAsDaemon(&env, (void*) &args);
 }
 
+static void attachOrDetachCurrentThread(const char* name, bool detach) {
+    LOG_ALWAYS_FATAL_IF(!mJvm, "No jvm but we set the hook??");
+
+    if (detach) {
+        mJvm->DetachCurrentThread();
+        return;
+    }
+
+    JavaVMAttachArgs args;
+    args.version = JNI_VERSION_1_4;
+    args.name = name;
+    args.group = NULL;
+    JNIEnv* env;
+    mJvm->AttachCurrentThread(&env, (void*) &args);
+}
+
 int register_android_view_ThreadedRenderer(JNIEnv* env) {
     env->GetJavaVM(&mJvm);
-    RenderThread::setOnStartHook(&attachRenderThreadToJvm);
+    RenderThread::setOnStartHook(&attachRenderThreadToJvm, &attachOrDetachCurrentThread);
 
     jclass hardwareRenderer = FindClassOrDie(env,
             "android/graphics/HardwareRenderer");
