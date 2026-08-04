@@ -4042,14 +4042,24 @@ public class SettingsProvider extends ContentProvider {
             }
         }
 
+        private void deleteAllSsaidKeysLocked(int userId) {
+            final long ssaidKey = makeKey(SETTINGS_TYPE_SSAID, userId,
+                    Context.DEVICE_ID_DEFAULT);
+            ensureSettingsStateLocked(ssaidKey);
+            final SettingsState ssaidSettings = getSettingsLocked(SETTINGS_TYPE_SSAID, userId,
+                    Context.DEVICE_ID_DEFAULT);
+            final List<String> ssaidKeys = new ArrayList<>(getSettingsNamesLocked(
+                    SETTINGS_TYPE_SSAID, userId, Context.DEVICE_ID_DEFAULT));
+            for (String key : ssaidKeys) {
+                ssaidSettings.deleteSettingLocked(key);
+            }
+        }
+
         private void ensureSecureSettingAndroidIdSetLocked(SettingsState secureSettings) {
             Setting value = secureSettings.getSettingLocked(Settings.Secure.ANDROID_ID);
 
-            if (!value.isNull()) {
-                return;
-            }
-
             final int userId = SettingsState.getUserIdFromKey(secureSettings.mKey);
+            final int deviceId = SettingsState.getDeviceIdFromKey(secureSettings.mKey);
 
             final UserInfo user;
             final long identity = Binder.clearCallingIdentity();
@@ -4063,7 +4073,22 @@ public class SettingsProvider extends ContentProvider {
                 return;
             }
 
-            String androidId = Long.toHexString(new SecureRandom().nextLong());
+            final String savedAndroidId = value == null || value.isNull() ? null : value.getValue();
+            final String configuredAndroidId = deviceId == Context.DEVICE_ID_DEFAULT
+                    ? SystemProperties.get("bst.android_id") : "";
+            if (savedAndroidId != null && (configuredAndroidId.isEmpty()
+                    || savedAndroidId.equals(configuredAndroidId))) {
+                return;
+            }
+
+            final String androidId = configuredAndroidId.isEmpty()
+                    ? Long.toHexString(new SecureRandom().nextLong()) : configuredAndroidId;
+            if (deviceId == Context.DEVICE_ID_DEFAULT) {
+                deleteAllSsaidKeysLocked(userId);
+                if (savedAndroidId != null) {
+                    SystemProperties.set("persist.sys.cleardata", "true");
+                }
+            }
             secureSettings.insertSettingLocked(Settings.Secure.ANDROID_ID, androidId,
                     null, true, SettingsState.SYSTEM_PACKAGE_NAME);
 
