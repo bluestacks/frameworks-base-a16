@@ -3054,9 +3054,11 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             return true;
         }
 
-        if (callingUid >= Process.FIRST_APPLICATION_UID
-                && ("android.hardware.bluestacks".equalsIgnoreCase(name)
-                || "android.hardware.nap".equalsIgnoreCase(name))) {
+        if ("android.hardware.bluestacks".equalsIgnoreCase(name)
+                || "android.hardware.nap".equalsIgnoreCase(name)) {
+            if (callingUid < Process.FIRST_APPLICATION_UID) {
+                return true;
+            }
             final BstFilterAppsManager filterApps = getBstFilterAppsManager();
             if (filterApps != null && callingPackage != null
                     && filterApps.isBluestacksPartnerApp(callingPackage)) {
@@ -3065,8 +3067,10 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         }
 
         if ("android.hardware.nowgg".equalsIgnoreCase(name)) {
-            if ("gg.now.accounts".equalsIgnoreCase(callingPackage)
-                    || "gg.now.billing.service2".equalsIgnoreCase(callingPackage)) {
+            if (callingUid < Process.FIRST_APPLICATION_UID
+                    || (callingPackage != null
+                    && (callingPackage.startsWith("gg.now")
+                    || callingPackage.startsWith("com.bluestacks")))) {
                 return true;
             }
             if (BST_DEBUG) {
