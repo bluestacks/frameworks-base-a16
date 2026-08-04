@@ -396,7 +396,7 @@ final class InitAppsHelper {
         final File blueStacksAppDir =
                 new File(Environment.getDataDirectory(), "downloads");
         collectScanParams(scanParamsList, blueStacksAppDir, mSystemParseFlags,
-                mSystemScanFlags, packageParser, executorService, null);
+                mSystemScanFlags | SCAN_AS_SYSTEM, packageParser, executorService, null);
 
         // Scan all directories with the parameters contained in scanParamsList.
         parallelScanDirTracedLI(scanParamsList, packageParser, executorService);
