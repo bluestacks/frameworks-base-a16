@@ -1895,6 +1895,107 @@ static void BindMountStorageDirs(JNIEnv* env, jobjectArray pkg_data_info_list,
 }
 
 // Utility routine to specialize a zygote child process.
+// BS-A16: ported from A13 commit 004eac79a86f.
+// Per-app native bridge (Houdini/NDK Translation) switch support.
+#include <string.h>
+
+static char g_pkgname[256];
+
+static inline void init_pkgname(const char* app_data_dir_in)
+{
+    g_pkgname[0] = 0;
+    if (app_data_dir_in == nullptr) return;
+
+    const char* str = strrchr(app_data_dir_in, '/');
+    if (str == nullptr) return;
+
+    size_t len = strlen(++str);
+    if (len >= sizeof(g_pkgname)) len = sizeof(g_pkgname) - 1;
+    memcpy(g_pkgname, str, len);
+    g_pkgname[len] = 0;
+}
+
+#define BST_MAX_SMALL_FILE_SIZE (1024 * 1024)
+// Allocate a buffer to read a small regular file (null-terminated).
+static char* _bst_read_small_file(const char* file_path, loff_t* file_size)
+{
+    FILE *fp;
+    struct stat st;
+    char *buf = NULL;
+    loff_t f_size = 0;
+    ssize_t bytes = 0;
+
+    fp = fopen(file_path, "r");
+    if (!fp) {
+        goto out;
+    }
+
+    if (fstat(fileno(fp), &st) && !S_ISREG(st.st_mode)) {
+        ALOGE("Error in fstat file %s\n", file_path);
+        goto out;
+    }
+
+    f_size = st.st_size;
+    if (f_size <= 0) {
+        goto out;
+    }
+
+    if (f_size > BST_MAX_SMALL_FILE_SIZE) {
+        ALOGE("The size of the file %s is too large\n", file_path);
+        goto out;
+    }
+
+    buf = (char *)malloc(f_size + 1);
+    if (!buf) {
+        goto out;
+    }
+
+    bytes = fread(buf, f_size, 1, fp);
+    if (bytes < 0) {
+        free(buf);
+        buf = NULL;
+        goto out;
+    }
+    buf[f_size] = 0;  // ensure null-termination for strsep
+
+    *file_size = f_size;
+
+out:
+    if (fp != NULL)
+        fclose(fp);
+
+    return buf;
+}
+
+// BS-A16: ported from A13 commit 004eac79a86f.
+// Returns true if package is configured for NDK translation (config.db "ndk":"true").
+static bool bst_is_ndk_translation_app(const char *calling_pkg)
+{
+#define NDK_TRANSLAION_FILE_PATH "/data/downloads/.tmp/.bstNdkTranslationApps"
+    char *file_buf, *temp, *token;
+    loff_t file_size  = 0;
+    bool ret = false;
+
+    file_buf = _bst_read_small_file(NDK_TRANSLAION_FILE_PATH, &file_size);
+    if (!file_buf || !calling_pkg)
+        goto out;
+
+    temp = file_buf;
+    while ((token = strsep(&temp, ";")) != NULL && strlen(token) > 0) {
+        if (strcmp(token, calling_pkg) == 0) {
+            ret = true;
+            break;
+        }
+    }
+
+out:
+    if (file_buf)
+        free(file_buf);
+
+    return ret;
+#undef NDK_TRANSLAION_FILE_PATH
+}
+
 static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, jint runtime_flags,
                              jobjectArray rlimits, jlong permitted_capabilities,
                              jlong effective_capabilities, jlong bounding_capabilities,
@@ -1912,6 +2013,9 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, 
     auto nice_name = extract_fn(managed_nice_name);
     auto instruction_set = extract_fn(managed_instruction_set);
     auto app_data_dir = extract_fn(managed_app_data_dir);
+
+    // BS-A16: capture package name for per-app native bridge selection.
+    init_pkgname(app_data_dir.has_value() ? app_data_dir.value().c_str() : nullptr);
 
     // Permit bounding capabilities
     permitted_capabilities |= bounding_capabilities;
@@ -1988,6 +2092,17 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, 
     SetGids(env, gids, is_child_zygote, fail_fn);
     SetRLimits(env, rlimits, fail_fn);
 
+    // BS-A16: ported from A13 commit 004eac79a86f.
+    // For apps configured with "ndk":"true" in config.db, bind-mount NDK translation
+    // arm64 libs over /system/lib64/arm64 so libnb.cpp selects libndk_translation.so
+    // instead of libhoudini.so (arm64/libtcb.so disappears under the bind mount).
+    if (uid >= 10000 && bst_is_ndk_translation_app(g_pkgname)) {
+        if (TEMP_FAILURE_RETRY(mount("/system/lib64/arm64_ndk",
+                                     "/system/lib64/arm64", nullptr, MS_BIND, nullptr)) == -1) {
+            ALOGW("Failed to bind-mount /system/lib64/arm64_ndk as /system/lib64/arm64: %s", strerror(errno));
+        }
+    }
+
     if (need_pre_initialize_native_bridge) {
         // Due to the logic behind need_pre_initialize_native_bridge we know that
         // instruction_set contains a value.
@@ -1995,6 +2110,7 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, 
                                                                     : nullptr,
                                            instruction_set.value().c_str());
     }
+
 
     if (is_system_server && !(runtime_flags & RuntimeFlags::PROFILE_SYSTEM_SERVER)) {
         // Prefetch the classloader for the system server. This is done early to
