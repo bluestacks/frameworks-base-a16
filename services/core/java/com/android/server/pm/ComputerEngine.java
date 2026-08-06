@@ -1274,6 +1274,12 @@ public class ComputerEngine implements Computer {
                         mSettings.getSettingBase(UserHandle.getAppId(filterCallingUid));
                 PackageStateInternal resolvedSetting =
                         getPackageStateInternal(info.activityInfo.packageName, 0);
+                if (resolvedSetting == null) {
+                    Slog.w(TAG, "Dropping stale activity resolve result for "
+                            + info.activityInfo.packageName);
+                    resolveInfos.remove(i);
+                    continue;
+                }
                 if (resolveForStart
                         || !mAppsFilter.shouldFilterApplication(this,
                         filterCallingUid, callingSetting, resolvedSetting, userId)) {
@@ -1309,6 +1315,12 @@ public class ComputerEngine implements Computer {
                         mSettings.getSettingBase(UserHandle.getAppId(filterCallingUid));
                 PackageStateInternal resolvedSetting =
                         getPackageStateInternal(info.serviceInfo.packageName, 0);
+                if (resolvedSetting == null) {
+                    Slog.w(TAG, "Dropping stale service resolve result for "
+                            + info.serviceInfo.packageName);
+                    resolveInfos.remove(i);
+                    continue;
+                }
                 if (!mAppsFilter.shouldFilterApplication(this,
                         filterCallingUid, callingSetting, resolvedSetting, userId)) {
                     continue;
