@@ -388,18 +388,20 @@ final class InitAppsHelper {
                     partition.apexInfo);
         }
 
+        // Scan all directories with the parameters contained in scanParamsList.
+        parallelScanDirTracedLI(scanParamsList, packageParser, executorService);
+
+        // System and data contain duplicate BlueStacks package names. Preserve the
+        // A13 ordering so a parallel race cannot split resolver and package state.
         final File blueStacksPrivAppDir =
                 new File(Environment.getDataDirectory(), "priv-downloads");
-        collectScanParams(scanParamsList, blueStacksPrivAppDir, mSystemParseFlags,
+        scanDirTracedLI(blueStacksPrivAppDir, mSystemParseFlags,
                 mSystemScanFlags | SCAN_AS_PRIVILEGED, packageParser, executorService, null);
 
         final File blueStacksAppDir =
                 new File(Environment.getDataDirectory(), "downloads");
-        collectScanParams(scanParamsList, blueStacksAppDir, mSystemParseFlags,
+        scanDirTracedLI(blueStacksAppDir, mSystemParseFlags,
                 mSystemScanFlags | SCAN_AS_SYSTEM, packageParser, executorService, null);
-
-        // Scan all directories with the parameters contained in scanParamsList.
-        parallelScanDirTracedLI(scanParamsList, packageParser, executorService);
 
         if (!mPm.mPackages.containsKey("android")) {
             throw new IllegalStateException(
