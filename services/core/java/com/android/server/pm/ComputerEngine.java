@@ -4741,7 +4741,7 @@ public class ComputerEngine implements Computer {
 
     private static boolean isBstCallerPrivileged(int callingUid) {
         final String callingPackage = callingUid >= Process.FIRST_APPLICATION_UID
-                ? BstUtils.getAppNameFromPid(Binder.getCallingPid()) : "";
+                ? BstUtils.getAppNameFromPid(Binder.getCallingPid()) : null;
         return BstUtils.bstIsCallingAppPrivileged(callingUid, callingPackage);
     }
 
