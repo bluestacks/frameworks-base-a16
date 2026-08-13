@@ -16,6 +16,5 @@
 
 <webviewproviders>
     <!-- The default WebView implementation -->
-    <webviewprovider availableByDefault="true" description="Chrome Stable" packageName="com.android.chrome" />
     <webviewprovider description="Android WebView" packageName="com.android.webview" isFallback="true" availableByDefault="true" />
 </webviewproviders>
