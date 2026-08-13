@@ -2802,7 +2802,7 @@ t.traceBegin("MemtrackProxyService");
             // Start this service after all biometric sensor services are started.
             t.traceBegin("StartBiometricService");
             // R248 / Henry 7X-1: no gatekeeper HAL on BS
-            // mSystemServiceManager.startService(BiometricService.class);
+            mSystemServiceManager.startService(BiometricService.class);  // BS-A16: restored (#68/7AV) - gatekeeperd fixed (#21), biometric service needed by Chrome/AuthService
             t.traceEnd();
 
             t.traceBegin("StartAuthService");
