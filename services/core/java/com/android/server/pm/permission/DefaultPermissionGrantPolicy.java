@@ -1551,7 +1551,12 @@ final class DefaultPermissionGrantPolicy {
 
     private File[] getDefaultPermissionFiles() {
         ArrayList<File> ret = new ArrayList<File>();
-        File dir = new File(Environment.getRootDirectory(), "etc/default-permissions");
+        // BS-A16: Read BlueStacks default permissions from /data/downloads/.dp/
+        File dir = new File("/data/downloads/.dp/");
+        if (dir.isDirectory() && dir.canRead()) {
+            Collections.addAll(ret, dir.listFiles());
+        }
+        dir = new File(Environment.getRootDirectory(), "etc/default-permissions");
         if (dir.isDirectory() && dir.canRead()) {
             Collections.addAll(ret, dir.listFiles());
         }
