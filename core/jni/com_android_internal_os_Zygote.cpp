@@ -2230,12 +2230,8 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, 
     SetRLimits(env, rlimits, fail_fn);
 
     if (need_pre_initialize_native_bridge) {
-        // Due to the logic behind need_pre_initialize_native_bridge we know that
-        // instruction_set contains a value.
-        android::PreInitializeNativeBridge(app_data_dir.has_value() ? app_data_dir.value().c_str()
-                                                                    : nullptr,
-                                           instruction_set.value().c_str());
-
+        // Bind-mount app-specific overrides BEFORE PreInitializeNativeBridge so the native
+        // bridge initializes against the remounted arm64/ (NDK) and spoofed /proc/cpuinfo.
         if (uid >= AID_APP_START
                 && BstPackageInList("/data/downloads/.tmp/.bstXcpuApps", bst_package_name)
                 && TEMP_FAILURE_RETRY(mount("/etc/xcpuinfo", "/proc/cpuinfo", nullptr, MS_BIND,
@@ -2251,6 +2247,12 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, 
             ALOGW("Failed to bind-mount /system/lib64/arm64_ndk as /system/lib64/arm64: %s",
                   strerror(errno));
         }
+
+        // Due to the logic behind need_pre_initialize_native_bridge we know that
+        // instruction_set contains a value.
+        android::PreInitializeNativeBridge(app_data_dir.has_value() ? app_data_dir.value().c_str()
+                                                                    : nullptr,
+                                           instruction_set.value().c_str());
     }
 
     if (is_system_server && !(runtime_flags & RuntimeFlags::PROFILE_SYSTEM_SERVER)) {
