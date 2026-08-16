@@ -1418,6 +1418,11 @@ public class ContentProviderHelper {
                             if (pkgInfo != null && !ArrayUtils.isEmpty(pkgInfo.providers)) {
                                 for (ProviderInfo pi : pkgInfo.providers) {
                                     // NOTE: keep in sync with generateApplicationProvidersLocked
+                                    if (pi.authority == null) {
+                                        Log.w(TAG, "Skipping provider without a registered authority: "
+                                                + pi.name);
+                                        continue;
+                                    }
                                     final boolean processMatch =
                                             Objects.equals(pi.processName, app.processName)
                                             || pi.multiprocess;
