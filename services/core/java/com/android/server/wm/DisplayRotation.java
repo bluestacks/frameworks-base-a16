@@ -582,6 +582,11 @@ public class DisplayRotation {
 
         mRotation = rotation;
 
+        // BS-A16: notify the host player whenever the display rotation commits so it can
+        // resize its window. Covers shell-transition rotations (e.g. recents), which bypass
+        // WMS.updateRotationUnchecked.
+        mService.sendOrientationToHostAsync(rotation);
+
         mDisplayContent.applyFixedRotationForNonTopVisibleActivityIfNeeded();
         mDisplayContent.setLayoutNeeded();
         mDisplayContent.mWaitingForConfig = true;
@@ -1109,8 +1114,10 @@ public class DisplayRotation {
         }
 
         @Surface.Rotation
-        // BST: Not using sensorRotation (no accelerometer); use lastRotation.
-        int sensorRotation = lastRotation;
+        // BS-A16: no accelerometer on the player; resolve "sensor" to the user rotation
+        // (landscape) instead of the last rotation, so UNSPECIFIED pages (launcher,
+        // recents) return to landscape after a portrait game instead of sticking to it.
+        int sensorRotation = mUserRotation;
         if (BST_DEBUG_ORIENTATION)
             Log.d(TAG, "rotationForOrientation: mUserRotationMode  " + mUserRotationMode + " sensorRotation "  + sensorRotation );
 

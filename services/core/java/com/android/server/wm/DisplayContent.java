@@ -1774,6 +1774,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 && !getDisplayRotation().isFixedToUserRotation();
     }
 
+
     /**
      * Determine the new desired orientation of this display.
      *
@@ -6888,12 +6889,11 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     @Override
     boolean getIgnoreOrientationRequest() {
-        if (mHasSetIgnoreOrientationRequest
-                || !com.android.window.flags.Flags.universalResizableByDefault()) {
-            return super.getIgnoreOrientationRequest();
-        }
-        // Large screen (sw >= 600dp) ignores orientation request by default.
-        return isLargeScreen() && !mWmService.isIgnoreOrientationRequestDisabled();
+        // BS-A16: the player display always honors app orientation requests (A13 behavior).
+        // Upstream defaults large screens to ignoring them, which blocked portrait games
+        // from rotating the player window and also stripped fixed orientations from
+        // universal-resizable activities (e.g. recents) via isUniversalResizeable().
+        return false;
     }
 
     @Override

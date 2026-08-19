@@ -6933,32 +6933,63 @@ public class WindowManagerService extends IWindowManager.Stub
 
     /**
      * Send orientation update to HOST (P2 BatchC). Fail-open.
+     * Debounced: transient rotations during shell transitions (e.g. recents) must not flip
+     * the host window before the display rotation settles.
      * @hide
      */
     public void sendOrientationToHostAsync(final int rotation) {
-        try {
-            BstHostCallManager hostCall = mBstHostCallManagerService;
-            if (hostCall == null) {
-                hostCall = (BstHostCallManager) mContext.getSystemService(Context.BST_HOST_CALL);
-            }
-            if (hostCall == null) {
+        // Debounced: shell-transition rotations (recents) commit and then silently revert
+        // without a commit, so the runnable defers while a transition is running and then
+        // re-reads the live rotation; only the settled value ever reaches the host.
+        mH.removeCallbacks(mBstSendOrientationHost);
+        mBstOrientationDeferCount = 0;
+        mH.postDelayed(mBstSendOrientationHost, BST_ORIENTATION_HOST_DEBOUNCE_MS);
+    }
+
+    private static final long BST_ORIENTATION_HOST_DEBOUNCE_MS = 300;
+    private static final int BST_ORIENTATION_MAX_DEFERS = 20;
+    private int mBstOrientationDeferCount = 0;
+    private final Runnable mBstSendOrientationHost = new Runnable() {
+        @Override
+        public void run() {
+            final TransitionController bstTc = mAtmService != null
+                    ? mAtmService.getTransitionController() : null;
+            if (mBstOrientationDeferCount < BST_ORIENTATION_MAX_DEFERS
+                    && bstTc != null
+                    && bstTc.inTransition()) {
+                mBstOrientationDeferCount++;
+                mH.postDelayed(this, BST_ORIENTATION_HOST_DEBOUNCE_MS);
                 return;
             }
-            final BstHostCallManager hc = hostCall;
-            mH.post(() -> {
-                try {
-                    int rval = hc.onOrientationChange(rotation);
-                    if (rval != 0) {
-                        Slog.w(TAG, "P2 onOrientationChange rval=" + rval);
-                    }
-                } catch (Exception e) {
-                    Slog.w(TAG, "P2 onOrientationChange failed: " + e);
+            // BS-A16: a deferred rotation update can get stuck when the orientation change
+            // was consumed during a shell transition (e.g. recents) without ever committing
+            // the rotation, because updateOrientation() then sees mLastOrientation unchanged
+            // and no-ops forever. Re-evaluate before reading, bypassing that cache.
+            try {
+                synchronized (mGlobalLock) {
+                    mAtmService.mRootWindowContainer.updateRotationUnchecked();
                 }
-            });
-        } catch (Exception e) {
-            Slog.w(TAG, "P2 sendOrientationToHostAsync: " + e);
+            } catch (Exception e) {
+                Slog.w(TAG, "BST rotation re-evaluate failed: " + e);
+            }
+            final int rotation = getDefaultDisplayRotation();
+            try {
+                BstHostCallManager hostCall = mBstHostCallManagerService;
+                if (hostCall == null) {
+                    hostCall = (BstHostCallManager) mContext.getSystemService(Context.BST_HOST_CALL);
+                }
+                if (hostCall == null) {
+                    return;
+                }
+                int rval = hostCall.onOrientationChange(rotation);
+                if (rval != 0) {
+                    Slog.w(TAG, "P2 onOrientationChange rval=" + rval);
+                }
+            } catch (Exception e) {
+                Slog.w(TAG, "P2 onOrientationChange failed: " + e);
+            }
         }
-    }
+    };
 
     private void stopBstSignInPopupService(int userId) {
         if (!SystemProperties.getBoolean("bst.display_signin_popup", false)) {
