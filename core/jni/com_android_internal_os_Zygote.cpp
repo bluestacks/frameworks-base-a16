@@ -2239,9 +2239,15 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids, 
             ALOGW("Failed to bind-mount /etc/xcpuinfo as /proc/cpuinfo: %s", strerror(errno));
         }
 
+        // BS-A16 temp: default NDK translation for all ARM64 apps until houdini16
+        // issues are resolved; bst.houdini_debug=1 restores houdini-by-default.
+        // The per-app config list still forces NDK in both modes.
+        const bool bst_houdini_default =
+                android::base::GetBoolProperty("bst.houdini_debug", false);
         if (uid >= AID_APP_START
-                && BstPackageInList(
-                        "/data/downloads/.tmp/.bstNdkTranslationApps", bst_package_name)
+                && (!bst_houdini_default
+                    || BstPackageInList(
+                            "/data/downloads/.tmp/.bstNdkTranslationApps", bst_package_name))
                 && TEMP_FAILURE_RETRY(mount("/system/lib64/arm64_ndk", "/system/lib64/arm64",
                                             nullptr, MS_BIND, nullptr)) == -1) {
             ALOGW("Failed to bind-mount /system/lib64/arm64_ndk as /system/lib64/arm64: %s",
