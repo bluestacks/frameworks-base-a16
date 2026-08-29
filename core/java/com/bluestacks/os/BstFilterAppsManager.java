@@ -2029,4 +2029,19 @@ public class BstFilterAppsManager {
             return false;
         }
     }
+    /**
+     * @hide
+     */
+    public boolean isUEEGLCrashFixApp(String pkgName)
+    {
+        try {
+            return mService.isUEEGLCrashFixApp(pkgName);
+        } catch(Exception e) {
+            // Catching the error and returning default behavior as if entry was not
+            // present in config.db
+            if (DEBUG) e.printStackTrace();
+            return false;
+        }
+    }
+
 }

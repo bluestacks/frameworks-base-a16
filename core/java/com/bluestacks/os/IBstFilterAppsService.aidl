@@ -132,4 +132,5 @@ interface IBstFilterAppsService
     int getPScoreAbove(String pkgName);
     boolean isMapBufRangeReadOnceEnabled(String pkgName);
     boolean isFbCompleteCheckDisabled(String pkgName);
+    boolean isUEEGLCrashFixApp(String pkgName);
 }

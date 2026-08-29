@@ -200,6 +200,7 @@ public class BstFilterAppsService extends IBstFilterAppsService.Stub {
     private Set<String>           mRotateDisabledAppList = new TreeSet<String>();
     private Map<String, Boolean>  mUnreal5AppMap = new HashMap<String, Boolean>();
     private Set<String>           mUE5PBDisabledAppList = new TreeSet<String>();
+    private Set<String>           mUEEGLCrashFixAppList = new TreeSet<String>();
     private Set<String>   	      mBptcAppList = new TreeSet<String>();
     private Set<String>           mExtractNativeLibsAppList = new TreeSet<String>();
     private Set<String>           mDefaultXYDpiAppList = new TreeSet<String>();
@@ -2728,6 +2729,22 @@ public class BstFilterAppsService extends IBstFilterAppsService.Stub {
                                         removePackageEntryFromList(mUE5PBDisabledAppList,pkgException);
                                     }
                                 }
+                                else if (key.equalsIgnoreCase("UEEGLCrashFix")) {
+                                    synchronized (mUEEGLCrashFixAppList) {
+                                        if (value.equalsIgnoreCase("false")) {
+                                            packageName = "~" + packageName;
+                                        }
+                                        if (DEBUG)
+                                            Slog.d(TAG, "Adding " + packageName + " to mUEEGLCrashFixAppList \n");
+                                        mUEEGLCrashFixAppList.add(packageName);
+                                        if (packageName.startsWith("~")) {
+                                            if (DEBUG)
+                                                Slog.d(TAG, "Removing " + origPackageName + " from mUEEGLCrashFixAppList \n");
+                                            mUEEGLCrashFixAppList.remove(packageName.substring(1));
+                                        }
+                                        removePackageEntryFromList(mUEEGLCrashFixAppList,pkgException);
+                                    }
+                                }
                                 else if ((key.equalsIgnoreCase("bptc"))) {
                                     synchronized (mBptcAppList) {
                                         if (value.equalsIgnoreCase("false")) {
@@ -3561,6 +3578,11 @@ public class BstFilterAppsService extends IBstFilterAppsService.Stub {
         synchronized (mUE5PBDisabledAppList)
         {
             mUE5PBDisabledAppList.clear();
+        }
+
+        synchronized (mUEEGLCrashFixAppList)
+        {
+            mUEEGLCrashFixAppList.clear();
         }
 
         /* clear old mBptcAppList */
@@ -8182,6 +8204,34 @@ public class BstFilterAppsService extends IBstFilterAppsService.Stub {
     /**
      * @hide
      */
+
+    /**
+     * @hide
+     */
+    public boolean isUEEGLCrashFixApp(String pkgName)
+    {
+        if (DEBUG) Slog.d(TAG, "Trying to look for " + pkgName + " in UEEGLCrashFix app list\n");
+        initLists();
+
+        synchronized (mUEEGLCrashFixAppList)
+        {
+            if (mUEEGLCrashFixAppList.contains(pkgName))
+            {
+                return true;
+            }
+            else
+            {
+                String wildcardMatchedPackageName = isPackageMatchedWilcard(mUEEGLCrashFixAppList, pkgName);
+                if(wildcardMatchedPackageName != null)
+                {
+                    if (DEBUG) Slog.d(TAG, pkgName + " is in UEEGLCrashFix App List\n");
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public boolean isMapBufRangeReadOnceEnabled(String pkgName)
     {
         if (DEBUG) Slog.d(TAG, "Trying to look for " + pkgName + " in mGlMapBufferRangeReadOnce app list\n");
