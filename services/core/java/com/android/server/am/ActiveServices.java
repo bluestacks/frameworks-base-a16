@@ -1099,9 +1099,22 @@ public final class ActiveServices {
             }
         }
 
+        // BS-A16: BST family apps always start each other's services
+        // regardless of uid idle state (BS-Services is installed via
+        // /data/downloads/ so forceQueryable in the manifest is ignored and
+        // its uid goes cached-idle between interactions).
+        final boolean isBstFamilyCall =
+                (appPackageName != null && (appPackageName.startsWith("com.bluestacks.")
+                        || appPackageName.startsWith("com.uncube.")
+                        || appPackageName.startsWith("gg.now.")))
+                && (callingPackage != null && (callingPackage.startsWith("com.bluestacks.")
+                        || callingPackage.startsWith("com.uncube.")
+                        || callingPackage.startsWith("gg.now.")));
+
         // If this isn't a direct-to-foreground start, check our ability to kick off an
         // arbitrary service.
-        if (forcedStandby || (!r.isStartRequested() && !fgRequired)) {
+        if (!isBstFamilyCall
+                && (forcedStandby || (!r.isStartRequested() && !fgRequired))) {
             // Before going further -- if this app is not allowed to start services in the
             // background, then at this point we aren't going to let it period.
             final int allowed = mAm.getAppStartModeLOSP(appUid, appPackageName, appTargetSdkVersion,
@@ -5060,6 +5073,22 @@ public final class ActiveServices {
                 ResolveInfo rInfo = mAm.getPackageManagerInternal().resolveService(service,
                         resolvedType, flags, userId, callingUid, callingPid);
                 ServiceInfo sInfo = rInfo != null ? rInfo.serviceInfo : null;
+                // BS-A16: the BST app family (com.bluestacks.*/com.uncube.*/gg.now.*)
+                // is one product; the prebuilt launcher has no <queries> for
+                // BS-Services, so visibility filtering hides the service. Retry
+                // the resolution as system when the target is a BST family
+                // package and the caller got "not found".
+                if (sInfo == null && service.getPackage() != null) {
+                    final String targetPkg = service.getPackage();
+                    if (targetPkg.startsWith("com.bluestacks.")
+                            || targetPkg.startsWith("com.uncube.")
+                            || targetPkg.startsWith("gg.now.")) {
+                        rInfo = mAm.getPackageManagerInternal().resolveService(service,
+                                resolvedType, flags, userId, Process.SYSTEM_UID,
+                                0);
+                        sInfo = rInfo != null ? rInfo.serviceInfo : null;
+                    }
+                }
                 if (sInfo == null) {
                     Slog.w(TAG_SERVICE, "Unable to start service " + service + " U=" + userId +
                           ": not found");
