@@ -102,6 +102,7 @@ import com.android.server.SystemService.TargetUser;
 import com.android.server.utils.LazyJniRegistrar;
 import com.android.server.wm.ActivityTaskManagerInternal;
 import com.android.server.wm.CompatScaleProvider;
+import com.bluestacks.os.BstFilterAppsManager;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -196,6 +197,8 @@ public final class GameManagerService extends IGameManagerService.Stub {
     private final Set<Integer> mNonGameForegroundUids = new HashSet<>();
     private final GameManagerServiceSystemPropertiesWrapper mSysProps;
     private float mGameDefaultFrameRateValue;
+    private int mBstMaxFps;
+    private int mBstEnableHighFps;
 
     @VisibleForTesting
     static class Injector {
@@ -1593,6 +1596,8 @@ public final class GameManagerService extends IGameManagerService.Stub {
         mGameDefaultFrameRateValue = (float) mSysProps.getInt(
                 PROPERTY_RO_SURFACEFLINGER_GAME_DEFAULT_FRAME_RATE, 60);
         Slog.v(TAG, "Game Default Frame Rate : " + mGameDefaultFrameRateValue);
+        mBstMaxFps = SystemProperties.getInt("bst.max_fps", 0);
+        mBstEnableHighFps = SystemProperties.getInt("bst.enable_high_fps", 0);
     }
 
     private void sendUserMessage(int userId, int what, String eventForLog, int delayMillis) {
@@ -2250,6 +2255,22 @@ public final class GameManagerService extends IGameManagerService.Stub {
         nativeSetGameDefaultFrameRateOverride(uid, frameRate);
     }
 
+    // BST: per-app high fps unlock. Only games listed in the XperfMode whitelist
+    // (BstFilterAppsService) run above the platform default, and mode 1 entries
+    // additionally require the host high-fps switch (bst.enable_high_fps).
+    private float getBstGameFrameRate(int uid, float defaultRate) {
+        if (mBstMaxFps > 60 && mBstMaxFps <= 240) {
+            final BstFilterAppsManager bfam = BstFilterAppsManager.getInstance();
+            if (bfam != null) {
+                final int mode = bfam.getXperfMode(uid);
+                if (mode == 2 || (mode == 1 && mBstEnableHighFps > 0)) {
+                    return Math.max(defaultRate, (float) mBstMaxFps);
+                }
+            }
+        }
+        return defaultRate;
+    }
+
     private float getGameDefaultFrameRate(boolean isEnabled) {
         float gameDefaultFrameRate = 0.0f;
         if (gameDefaultFrameRate()) {
@@ -2285,7 +2306,8 @@ public final class GameManagerService extends IGameManagerService.Stub {
         // Update all foreground games' frame rate.
         synchronized (mUidObserverLock) {
             for (int uid : mGameForegroundUids) {
-                setGameDefaultFrameRateOverride(uid, getGameDefaultFrameRate(isEnabled));
+                setGameDefaultFrameRateOverride(uid,
+                        getBstGameFrameRate(uid, getGameDefaultFrameRate(isEnabled)));
             }
         }
     }
@@ -2341,7 +2363,8 @@ public final class GameManagerService extends IGameManagerService.Stub {
                         mSysProps.getBoolean(
                                 PROPERTY_DEBUG_GFX_GAME_DEFAULT_FRAME_RATE_DISABLED, false);
                 setGameDefaultFrameRateOverride(uid,
-                        getGameDefaultFrameRate(!isGameDefaultFrameRateDisabled));
+                        getBstGameFrameRate(uid,
+                                getGameDefaultFrameRate(!isGameDefaultFrameRateDisabled)));
                 mGameForegroundUids.add(uid);
             }
         }
