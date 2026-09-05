@@ -2078,6 +2078,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, CoreSt
             super(context);
         }
 
+        public StrongAuthTracker(Context context, Looper looper) {
+            super(context, looper);
+        }
+
         public boolean isUnlockingWithBiometricAllowed(boolean isStrongBiometric) {
             int userId = mSelectedUserInteractor.getSelectedUserId();
             return isBiometricAllowedForUser(isStrongBiometric, userId);
@@ -2273,7 +2277,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, CoreSt
         mUserTracker = userTracker;
         mTelephonyListenerManager = telephonyListenerManager;
         mDeviceProvisioned = isDeviceProvisionedInSettingsDb();
-        mStrongAuthTracker = new StrongAuthTracker(context);
+        // Pass the main looper explicitly: this singleton can be first constructed on a
+        // background thread (displaylib per-display dagger setup), where the default
+        // Looper.myLooper() is null and crashes handler creation.
+        mStrongAuthTracker = new StrongAuthTracker(context, mainLooper);
         mBackgroundExecutor = backgroundExecutor;
         mMainExecutor = mainExecutor;
         mBroadcastDispatcher = broadcastDispatcher;
