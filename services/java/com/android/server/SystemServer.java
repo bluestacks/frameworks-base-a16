@@ -1262,10 +1262,12 @@ public final class SystemServer implements Dumpable {
 // Start MemtrackProxyService before ActivityManager, so that early calls
 // to Memtrack::getMemory() don't fail.
 t.traceBegin("MemtrackProxyService");
-        // BS-A16: memtrack HAL not available, skip to avoid native blocking
-        Log.i("A16DBG:FwBase-HALSkip", "memtrack HAL skipped (BS bringup temp_debt)");
-        // (Watchdog kills system_server after 65s in MemtrackProxyService)
-        // startMemtrackProxyService();
+        // BS-A16: restored 2026-09-05 - the vendor memtrack-default AIDL HAL is
+        // running (memtrack.bst.so) and A13 runs the same chain fine; without the
+        // proxy every Memtrack::getMemory() call logs "Unable to connect to
+        // memtrack.proxy" (209+ per boot). Watchdog risk was only for a HAL that
+        // blocks at register time; registration itself does not query the HAL.
+        startMemtrackProxyService();
         t.traceEnd();
 
         // Start AccessCheckingService which provides new implementation for permission and app op.
