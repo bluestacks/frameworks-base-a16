@@ -87,6 +87,7 @@ import android.nfc.NfcAdapter;
 import android.os.BatteryManager;
 import android.os.CancellationSignal;
 import android.os.Handler;
+import android.os.HandlerExecutor;
 import android.os.Looper;
 import android.os.Message;
 import android.os.PowerManager;
@@ -2529,7 +2530,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, CoreSt
         mBroadcastDispatcher.registerReceiverWithHandler(mBroadcastAllReceiver, allUserFilter,
                 mHandler, UserHandle.ALL);
 
-        mSubscriptionManager.addOnSubscriptionsChangedListener(mSubscriptionListener);
+        // The deprecated overload dispatches on the listener's creator-thread looper, which
+        // is null when this singleton was first constructed on a displaylib background
+        // thread; dispatch on the main-thread handler explicitly instead.
+        mSubscriptionManager.addOnSubscriptionsChangedListener(
+                new HandlerExecutor(mHandler), mSubscriptionListener);
         mUserTracker.addCallback(mUserChangedCallback, mMainExecutor);
 
         mTrustManager.registerTrustListener(this);
