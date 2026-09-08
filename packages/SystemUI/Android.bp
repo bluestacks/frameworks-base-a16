@@ -1089,7 +1089,10 @@ systemui_optimized_java_defaults {
                 optimized_shrink_resources: true,
                 ignore_warnings: false,
                 proguard_compatibility: false,
-                d8_on_eng: true,
+                // BST ships eng-variant builds; upstream d8_on_eng:true disables
+                // R8 there and the unshrunk dex balloons to a 140MB container
+                // (167MB apk, 214MB odex) that dominates first-boot cold IO.
+                d8_on_eng: false,
             },
             conditions_default: {
                 optimize: {
