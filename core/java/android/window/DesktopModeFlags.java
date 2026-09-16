@@ -101,7 +101,7 @@ public enum DesktopModeFlags {
             true),
     ENABLE_DESKTOP_WINDOWING_TASK_LIMIT(Flags::enableDesktopWindowingTaskLimit, true),
     ENABLE_DESKTOP_WINDOWING_WALLPAPER_ACTIVITY(Flags::enableDesktopWindowingWallpaperActivity,
-            true),
+            false), // [BST] launcher is the desktop backdrop; no shell wallpaper activity
     ENABLE_DRAG_RESIZE_SET_UP_IN_BG_THREAD(Flags::enableDragResizeSetUpInBgThread, true),
     ENABLE_DRAG_TO_DESKTOP_INCOMING_TRANSITIONS_BUGFIX(
             Flags::enableDragToDesktopIncomingTransitionsBugfix, true),
