@@ -358,7 +358,8 @@ fun StatusBarRoot(
                     )
 
                     if (NewStatusBarIcons.isEnabled) {
-                        addBatteryComposable(phoneStatusBarView, statusBarViewModel)
+                        // [BST] hide battery icon: do not add the compose battery view
+                        // addBatteryComposable(phoneStatusBarView, statusBarViewModel)
                         // Also adjust the paddings :)
                         SystemStatusIconsLayoutHelper.configurePaddingForNewStatusBarIcons(
                             phoneStatusBarView.requireViewById(R.id.statusIcons)

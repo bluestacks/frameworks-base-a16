@@ -468,7 +468,7 @@ public class ShadeCarrierGroupController {
                         mInfos[slot] = mInfos[slot].changeVisibility(true);
                         slotSeen[slot] = true;
                         mCarrierGroups[slot].setCarrierText(carrierText);
-                        mCarrierGroups[slot].setVisibility(View.VISIBLE);
+                        mCarrierGroups[slot].setVisibility(View.GONE); // [BST] hide carrier in shade header
                     }
                 }
                 for (int i = 0; i < SIM_SLOTS; i++) {
@@ -503,7 +503,7 @@ public class ShadeCarrierGroupController {
         //  no-SIM case.
         mNoSimTextView.setText(text);
         if (!TextUtils.isEmpty(text)) {
-            mNoSimTextView.setVisibility(View.VISIBLE);
+            mNoSimTextView.setVisibility(View.GONE); // [BST] hide carrier in shade header
         }
     }
 
