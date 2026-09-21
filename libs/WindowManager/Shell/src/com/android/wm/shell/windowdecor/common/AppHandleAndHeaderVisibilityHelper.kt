@@ -48,6 +48,10 @@ class AppHandleAndHeaderVisibilityHelper(
      * should show or not for this task.
      */
     fun shouldShowAppHandleOrHeader(taskInfo: ActivityManager.RunningTaskInfo): Boolean {
+        // BS-A16: hide the app handle/header unless window mode is enabled.
+        if (android.os.SystemProperties.getInt("bst.freeform_launch", 0) == 0) {
+            return false
+        }
 
         // If DisplayController doesn't have it tracked, it could be a private/managed display, so
         // return false if display is null

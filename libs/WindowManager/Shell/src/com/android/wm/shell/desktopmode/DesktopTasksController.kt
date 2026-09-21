@@ -2903,6 +2903,10 @@ class DesktopTasksController(
     private fun isMaximizedToStableBoundsEdges(displayId: Int, taskBounds: Rect): Boolean {
         val displayLayout = displayController.getDisplayLayout(displayId) ?: return false
         val stableBounds = Rect().also { displayLayout.getStableBounds(it) }
+        // BS-A16: same status bar strip as DesktopModeUtils.isTaskMaximized.
+        if (android.os.SystemProperties.getInt("bst.hide_statusbar", 0) > 0) {
+            stableBounds.top = 0
+        }
         return isTaskBoundsEqual(taskBounds, stableBounds)
     }
 
