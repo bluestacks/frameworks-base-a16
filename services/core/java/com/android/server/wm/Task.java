@@ -150,6 +150,7 @@ import android.os.Message;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -2343,6 +2344,11 @@ class Task extends TaskFragment {
             // from root task bounds. and then caption will be shown inside stable area.
             final Rect stableBounds = new Rect();
             display.getStableRect(stableBounds);
+            if (SystemProperties.getInt("bst.enable_navigationbar_a16", 1) > 0) {
+                // Desktop mode auto-hides the status bar. Keeping its stable inset shifts
+                // maximized freeform windows down and leaves an empty top strip.
+                stableBounds.top = display.getBounds().top;
+            }
             parentBounds.intersect(stableBounds);
         }
 

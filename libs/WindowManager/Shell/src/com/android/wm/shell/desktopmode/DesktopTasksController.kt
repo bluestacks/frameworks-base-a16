@@ -950,12 +950,10 @@ class DesktopTasksController(
                                 DesktopTaskTilingState.RIGHT
                             else -> DesktopTaskTilingState.NONE
                         }
-                    val newStableBounds = Rect()
-                    val oldStableBounds = Rect()
                     val sourceLayout = displayController.getDisplayLayout(task.displayId) ?: return
                     val destLayout = destDisplayLayout ?: return
-                    destLayout.getStableBounds(newStableBounds)
-                    sourceLayout.getStableBounds(oldStableBounds)
+                    val newStableBounds = getDesktopFreeformArea(destLayout)
+                    val oldStableBounds = getDesktopFreeformArea(sourceLayout)
                     val newDisplayContext =
                         displayController.getDisplayContext(destinationDisplayId) ?: return
                     val newToOldDpiRatio =
@@ -1024,8 +1022,7 @@ class DesktopTasksController(
         if (!DesktopExperienceFlags.ENABLE_DISPLAY_DISCONNECT_INTERACTION.isTrue) return
         val newDisplayLayout = displayController.getDisplayLayout(displayId) ?: return
         if (oldDisplayLayout == null) return
-        val oldStableBounds = Rect()
-        oldDisplayLayout.getStableBounds(oldStableBounds)
+        val oldStableBounds = getDesktopFreeformArea(oldDisplayLayout)
         val newToOldDpiRatio =
             newDisplayLayout.densityDpi().toDouble() / oldDisplayLayout.densityDpi()
         snapEventHandler.onDisplayLayoutChange(
@@ -1034,9 +1031,6 @@ class DesktopTasksController(
             oldStableBounds,
             newToOldDpiRatio,
         )
-        val stableBounds = Rect()
-        newDisplayLayout?.getStableBounds(stableBounds)
-
         val wct = WindowContainerTransaction()
         val userId = userRepositories.current.userId
         userRepositories.forAllRepositories { userRepo ->
@@ -2906,11 +2900,7 @@ class DesktopTasksController(
 
     private fun isMaximizedToStableBoundsEdges(displayId: Int, taskBounds: Rect): Boolean {
         val displayLayout = displayController.getDisplayLayout(displayId) ?: return false
-        val stableBounds = Rect().also { displayLayout.getStableBounds(it) }
-        // BS-A16: same status bar strip as DesktopModeUtils.isTaskMaximized.
-        if (android.os.SystemProperties.getInt("bst.hide_statusbar", 0) > 0) {
-            stableBounds.top = 0
-        }
+        val stableBounds = getDesktopFreeformArea(displayLayout)
         return isTaskBoundsEqual(taskBounds, stableBounds)
     }
 
@@ -3131,10 +3121,15 @@ class DesktopTasksController(
     private fun isSnapResizingAllowed(taskInfo: RunningTaskInfo) =
         taskInfo.isResizeable || !DISABLE_NON_RESIZABLE_APP_SNAP_RESIZE.isTrue()
 
-    private fun getSnapBounds(displayId: Int, position: SnapPosition): Rect {
+    @VisibleForTesting
+    fun getSnapBounds(
+        displayId: Int,
+        position: SnapPosition,
+        desktopFreeformAreaProvider: (DisplayLayout) -> Rect = ::getDesktopFreeformArea,
+    ): Rect {
         val displayLayout = displayController.getDisplayLayout(displayId) ?: return Rect()
 
-        val stableBounds = Rect().also { displayLayout.getStableBounds(it) }
+        val stableBounds = desktopFreeformAreaProvider(displayLayout)
 
         val destinationWidth = stableBounds.width() / 2
         return when (position) {
@@ -4796,10 +4791,8 @@ class DesktopTasksController(
             } else {
                 destHeightMargin / 2
             }
-        val sourceStableBounds = Rect()
-        val destStableBounds = Rect()
-        sourceLayout.getStableBounds(sourceStableBounds)
-        destLayout.getStableBounds(destStableBounds)
+        val sourceStableBounds = getDesktopFreeformArea(sourceLayout)
+        val destStableBounds = getDesktopFreeformArea(destLayout)
         val boundsWithinDisplay =
             if (taskTilingState == DesktopTaskTilingState.LEFT) {
                 val dividerBounds =
@@ -6020,11 +6013,16 @@ class DesktopTasksController(
         when (indicatorType) {
             IndicatorType.TO_FULLSCREEN_INDICATOR -> {
                 val shouldMaximizeWhenDragToTopEdge =
-                    if (DesktopExperienceFlags.ENABLE_DESKTOP_FIRST_BASED_DRAG_TO_MAXIMIZE.isTrue)
-                        rootTaskDisplayAreaOrganizer.isDisplayDesktopFirst(
-                            motionEvent.getDisplayId()
-                        )
-                    else desktopConfig.shouldMaximizeWhenDragToTopEdge
+                    SystemProperties.getInt("bst.enable_navigationbar_a16", 1) > 0 ||
+                        if (
+                            DesktopExperienceFlags.ENABLE_DESKTOP_FIRST_BASED_DRAG_TO_MAXIMIZE.isTrue
+                        ) {
+                            rootTaskDisplayAreaOrganizer.isDisplayDesktopFirst(
+                                motionEvent.getDisplayId()
+                            )
+                        } else {
+                            desktopConfig.shouldMaximizeWhenDragToTopEdge
+                        }
                 if (shouldMaximizeWhenDragToTopEdge) {
                     dragToMaximizeDesktopTask(taskInfo, taskSurface, currentDragBounds, motionEvent)
                 } else {

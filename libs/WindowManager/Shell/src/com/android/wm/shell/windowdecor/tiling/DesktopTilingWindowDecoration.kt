@@ -55,6 +55,7 @@ import com.android.wm.shell.desktopmode.DesktopModeEventLogger
 import com.android.wm.shell.desktopmode.DesktopModeEventLogger.Companion.ResizeTrigger
 import com.android.wm.shell.desktopmode.DesktopTasksController.SnapPosition
 import com.android.wm.shell.desktopmode.DesktopUserRepositories
+import com.android.wm.shell.desktopmode.getDesktopFreeformArea
 import com.android.wm.shell.desktopmode.ReturnToDragStartAnimator
 import com.android.wm.shell.desktopmode.ToggleResizeDesktopTaskTransitionHandler
 import com.android.wm.shell.protolog.ShellProtoLogGroup.WM_SHELL_DESKTOP_MODE
@@ -104,6 +105,7 @@ class DesktopTilingWindowDecoration(
     private val shellController: ShellController,
     private val interactionJankMonitor: InteractionJankMonitor,
     private val transactionSupplier: Supplier<Transaction> = Supplier { Transaction() },
+    private val desktopFreeformAreaProvider: (DisplayLayout) -> Rect = ::getDesktopFreeformArea,
 ) :
     Transitions.TransitionHandler,
     ShellTaskOrganizer.FocusListener,
@@ -369,9 +371,9 @@ class DesktopTilingWindowDecoration(
     fun onDividerHandleMoved(dividerBounds: Rect, t: SurfaceControl.Transaction): Boolean {
         val leftTiledTask = leftTaskResizingHelper ?: return false
         val rightTiledTask = rightTaskResizingHelper ?: return false
-        val stableBounds = Rect()
         val displayLayout = displayController.getDisplayLayout(displayId)
-        displayLayout?.getStableBounds(stableBounds)
+        val stableBounds =
+            displayLayout?.let { desktopFreeformAreaProvider(it) } ?: Rect()
 
         if (stableBounds.isEmpty) return false
 
@@ -949,8 +951,7 @@ class DesktopTilingWindowDecoration(
         val displayContext = displayController.getDisplayContext(displayId) ?: return Rect()
         dividerWidth =
             displayContext.resources.getDimensionPixelSize(R.dimen.split_divider_bar_width)
-        val stableBounds = Rect()
-        displayLayout.getStableBounds(stableBounds)
+        val stableBounds = desktopFreeformAreaProvider(displayLayout)
         val leftTiledTask = leftTaskResizingHelper
         val rightTiledTask = rightTaskResizingHelper
         val destinationWidth = stableBounds.width() / 2
@@ -978,8 +979,7 @@ class DesktopTilingWindowDecoration(
     }
 
     private fun inflateDividerBounds(displayLayout: DisplayLayout): Rect {
-        val stableBounds = Rect()
-        displayLayout.getStableBounds(stableBounds)
+        val stableBounds = desktopFreeformAreaProvider(displayLayout)
 
         val leftDividerBounds = leftTaskResizingHelper?.bounds?.right ?: return Rect()
         val rightDividerBounds = rightTaskResizingHelper?.bounds?.left ?: return Rect()
@@ -1000,8 +1000,7 @@ class DesktopTilingWindowDecoration(
         val newContext = displayController.getDisplayContext(displayId) ?: return
         val dividerRightBound = rightTaskResizingHelper?.bounds
         val dividerLeftBound = leftTaskResizingHelper?.bounds
-        val newStableBounds = Rect()
-        newLayout.getStableBounds(newStableBounds)
+        val newStableBounds = desktopFreeformAreaProvider(newLayout)
         val newDividerBounds =
             getDividerBoundsForZombieSession(
                 dividerLeftBound,

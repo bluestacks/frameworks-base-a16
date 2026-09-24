@@ -16,12 +16,17 @@
 
 package com.android.wm.shell.desktopmode
 
+import android.app.ActivityManager.RunningTaskInfo
 import android.graphics.Rect
 import android.testing.AndroidTestingRunner
 import androidx.test.filters.SmallTest
+import com.android.wm.shell.common.DisplayLayout
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.kotlin.any
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
 
 @SmallTest
 @RunWith(AndroidTestingRunner::class)
@@ -54,6 +59,29 @@ class DesktopModeUtilsTest {
     @Test
     fun isTaskWidthOrHeightEqual_stableBoundsWidthOrHeightAreNotEquals_returnFalse() {
         assertThat(isTaskWidthOrHeightEqual(task1Bounds, stableBounds)).isTrue()
+    }
+
+    @Test
+    fun isTaskMaximized_nonResizableTaskMatchesWidth_returnTrue() {
+        val maximizeBounds = Rect(0, 0, 1000, 800)
+        val taskInfo =
+            RunningTaskInfo().apply {
+                isResizeable = false
+                configuration.windowConfiguration.bounds.set(0, 100, 1000, 700)
+            }
+
+        assertThat(isTaskMaximized(taskInfo, maximizeBounds)).isTrue()
+    }
+
+    @Test
+    fun getDesktopFreeformArea_bstDesktop_usesAutoHiddenStatusBarArea() {
+        val displayLayout = mock<DisplayLayout>()
+        whenever(displayLayout.getStableBounds(any())).thenAnswer { invocation ->
+            (invocation.arguments.first() as Rect).set(0, 32, 1000, 800)
+        }
+
+        assertThat(getDesktopFreeformArea(displayLayout, isBstDesktopModeEnabled = true))
+            .isEqualTo(Rect(0, 0, 1000, 800))
     }
 
     private companion object {

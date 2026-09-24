@@ -42,6 +42,7 @@ import android.view.DragEvent
 import android.window.DesktopExperienceFlags
 import android.window.DesktopModeFlags
 import android.window.SplashScreen.SPLASH_SCREEN_STYLE_ICON
+import com.android.internal.annotations.VisibleForTesting
 import com.android.internal.policy.DesktopModeCompatUtils
 import com.android.wm.shell.ShellTaskOrganizer
 import com.android.wm.shell.common.DisplayController
@@ -183,13 +184,7 @@ fun calculateInitialBounds(
  * into consideration.
  */
 fun calculateMaximizeBounds(displayLayout: DisplayLayout, taskInfo: RunningTaskInfo): Rect {
-    val stableBounds = Rect()
-    displayLayout.getStableBounds(stableBounds)
-    // BS-A16: with the status bar hidden the top inset strip belongs to nobody;
-    // maximize should cover the full display height.
-    if (android.os.SystemProperties.getInt("bst.hide_statusbar", 0) > 0) {
-        stableBounds.top = 0
-    }
+    val stableBounds = getDesktopMaximizeArea(displayLayout)
     if (taskInfo.isResizeable) {
         // if resizable then expand to entire stable bounds (full display minus insets)
         return Rect(stableBounds)
@@ -294,20 +289,52 @@ fun calculateAspectRatio(taskInfo: TaskInfo): Float {
 
 /** Returns whether the task is maximized. */
 fun isTaskMaximized(taskInfo: RunningTaskInfo, displayLayout: DisplayLayout): Boolean {
-    val stableBounds = Rect()
-    displayLayout.getStableBounds(stableBounds)
-    // BS-A16: mirror calculateMaximizeBounds() which strips the hidden status
-    // bar inset, so a window maximized to the top edge is recognized as such.
-    if (android.os.SystemProperties.getInt("bst.hide_statusbar", 0) > 0) {
-        stableBounds.top = 0
-    }
+    return isTaskMaximized(taskInfo, getDesktopMaximizeArea(displayLayout))
+}
+
+fun isTaskMaximized(taskInfo: RunningTaskInfo, maximizeBounds: Rect): Boolean {
     val currentTaskBounds = taskInfo.configuration.windowConfiguration.bounds
     return if (taskInfo.isResizeable) {
-        isTaskBoundsEqual(currentTaskBounds, stableBounds)
+        isTaskBoundsEqual(currentTaskBounds, maximizeBounds)
     } else {
-        isTaskWidthOrHeightEqual(currentTaskBounds, stableBounds)
+        isTaskWidthOrHeightEqual(currentTaskBounds, maximizeBounds)
     }
 }
+
+/**
+ * Returns the area used by ordinary freeform maximize. BlueStacks desktop mode auto-hides the
+ * status bar, so maximized freeform windows can use the full display without switching to
+ * fullscreen windowing mode.
+ */
+private fun getDesktopMaximizeArea(displayLayout: DisplayLayout): Rect {
+    if (isBstDesktopModeEnabled()) {
+        return Rect(0, 0, displayLayout.width(), displayLayout.height())
+    }
+    return Rect().apply { displayLayout.getStableBounds(this) }
+}
+
+/**
+ * Returns stable freeform bounds while allowing tasks to occupy the auto-hidden status bar area.
+ */
+internal fun getDesktopFreeformArea(displayLayout: DisplayLayout): Rect {
+    return getDesktopFreeformArea(displayLayout, isBstDesktopModeEnabled())
+}
+
+@VisibleForTesting
+fun getDesktopFreeformArea(
+    displayLayout: DisplayLayout,
+    isBstDesktopModeEnabled: Boolean,
+): Rect {
+    return Rect().apply {
+        displayLayout.getStableBounds(this)
+        if (isBstDesktopModeEnabled) {
+            top = 0
+        }
+    }
+}
+
+private fun isBstDesktopModeEnabled(): Boolean =
+    SystemProperties.getInt("bst.enable_navigationbar_a16", 1) > 0
 
 /** Returns true if task's width or height is maximized else returns false. */
 fun isTaskWidthOrHeightEqual(taskBounds: Rect, stableBounds: Rect): Boolean {

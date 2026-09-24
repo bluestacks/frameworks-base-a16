@@ -555,8 +555,7 @@ constructor(
                 displayId: Int,
                 snapEventHandler: SnapEventHandler,
             ): Rect {
-                val desktopStableBounds = Rect()
-                layout.getStableBounds(desktopStableBounds)
+                val desktopStableBounds = getDesktopFreeformArea(layout)
                 val padding = desktopStableBounds.top
                 when (type) {
                     IndicatorType.TO_FULLSCREEN_INDICATOR -> {
