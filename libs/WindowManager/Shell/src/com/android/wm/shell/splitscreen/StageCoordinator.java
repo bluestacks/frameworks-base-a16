@@ -768,13 +768,16 @@ public class StageCoordinator extends StageCoordinatorAbstract {
         return mLogger;
     }
 
-    void requestEnterSplitSelect(RunningTaskInfo taskInfo,
+    boolean requestEnterSplitSelect(RunningTaskInfo taskInfo,
             int splitPosition, Rect taskBounds, boolean startRecents,
             @Nullable WindowContainerTransaction withRecentsWct) {
         for (SplitScreen.SplitSelectListener listener : mSelectListeners) {
-            listener.onRequestEnterSplitSelect(taskInfo, splitPosition, taskBounds,
-                    startRecents, withRecentsWct);
+            if (listener.onRequestEnterSplitSelect(taskInfo, splitPosition, taskBounds,
+                    startRecents, withRecentsWct)) {
+                return true;
+            }
         }
+        return false;
     }
 
     void startShortcut(String packageName, String shortcutId, @SplitPosition int position,
@@ -3835,7 +3838,10 @@ public class StageCoordinator extends StageCoordinatorAbstract {
                 anyStageHasNoChildren = mMainStage.getChildCount() == 0
                         || mSideStage.getChildCount() == 0;
             }
-            if (anyStageHasNoChildren || dismissStages.size() == 1) {
+            final boolean waitingForSplitChildren =
+                    mSplitTransitions.mPendingEnter != null && dismissStages.isEmpty();
+            if ((anyStageHasNoChildren || dismissStages.size() == 1)
+                    && !waitingForSplitChildren) {
                 // If the size of dismissStages == 1, one of the task is closed without prepare
                 // pending transition, which could happen if all activities were finished after
                 // finish top activity in a task, so the trigger task is null when handleRequest.

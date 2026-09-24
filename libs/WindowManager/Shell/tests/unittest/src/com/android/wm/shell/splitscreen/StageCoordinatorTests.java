@@ -299,6 +299,20 @@ public class StageCoordinatorTests extends ShellTestCase {
     }
 
     @Test
+    public void requestEnterSplitSelect_noListener_returnsFalse() {
+        assertThat(mStageCoordinator.requestEnterSplitSelect(mRunningTaskInfo,
+                SPLIT_POSITION_TOP_OR_LEFT, mBounds1, true, mWct)).isFalse();
+    }
+
+    @Test
+    public void requestEnterSplitSelect_acceptingListener_returnsTrue() {
+        mStageCoordinator.registerSplitSelectListener(new TestSplitSelectListener(true));
+
+        assertThat(mStageCoordinator.requestEnterSplitSelect(mRunningTaskInfo,
+                SPLIT_POSITION_TOP_OR_LEFT, mBounds1, true, mWct)).isTrue();
+    }
+
+    @Test
     public void testMoveToStage_splitActiveForeground() {
         when(mStageCoordinator.isSplitActive()).thenReturn(true);
         when(mStageCoordinator.isSplitScreenVisible()).thenReturn(true);

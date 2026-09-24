@@ -33,6 +33,7 @@ import static com.android.wm.shell.common.split.SplitScreenUtils.reverseSplitPos
 import static com.android.wm.shell.common.split.SplitScreenUtils.splitFailureMessage;
 import static com.android.wm.shell.protolog.ShellProtoLogGroup.WM_SHELL_SPLIT_SCREEN;
 import static com.android.wm.shell.shared.split.SplitScreenConstants.KEY_EXTRA_WIDGET_INTENT;
+import static com.android.wm.shell.shared.split.SplitScreenConstants.SNAP_TO_2_50_50;
 import static com.android.wm.shell.shared.split.SplitScreenConstants.SPLIT_INDEX_0;
 import static com.android.wm.shell.shared.split.SplitScreenConstants.SPLIT_INDEX_1;
 import static com.android.wm.shell.shared.split.SplitScreenConstants.SPLIT_INDEX_UNDEFINED;
@@ -618,14 +619,22 @@ public class SplitScreenController implements SplitDragPolicy.Starter,
      * @param startRecents whether this request should start a recents transition
      * @param withRecentsWct a wct so include in the recents transition
      */
-    public void requestEnterSplitSelect(ActivityManager.RunningTaskInfo taskInfo,
+    public boolean requestEnterSplitSelect(ActivityManager.RunningTaskInfo taskInfo,
             int splitPosition, Rect taskBounds, boolean startRecents,
             @Nullable WindowContainerTransaction withRecentsWct) {
         if (!startRecents && withRecentsWct != null) {
             throw new IllegalArgumentException("Must be starting recents to include a wct");
         }
-        mStageCoordinator.requestEnterSplitSelect(taskInfo, splitPosition, taskBounds,
+        return mStageCoordinator.requestEnterSplitSelect(taskInfo, splitPosition, taskBounds,
                 startRecents, withRecentsWct);
+    }
+
+    /** Starts an app intent opposite an existing desktop task in split screen. */
+    public void startIntentAndTaskForDesktop(PendingIntent pendingIntent, int userId, int taskId,
+            @SplitPosition int taskPosition) {
+        startIntentAndTask(pendingIntent, userId, /* options1= */ null, taskId,
+                /* options2= */ null, reverseSplitPosition(taskPosition), SNAP_TO_2_50_50,
+                /* remoteTransition= */ null, /* instanceId= */ null);
     }
 
     /**
