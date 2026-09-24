@@ -91,6 +91,7 @@ class MediaProjectionAppSelectorActivity(
     private var reviewGrantedConsentRequired = false
     // If an app is selected, set to true so that we don't send RECORD_CANCEL in onDestroy
     private var taskSelected = false
+    private var desktopSplitResultSent = false
 
     override fun getLayoutResource() = R.layout.media_projection_app_selector
 
@@ -170,6 +171,21 @@ class MediaProjectionAppSelectorActivity(
         if (targetInfo is NotSelectableTargetInfo) return
 
         val intent = createIntent(targetInfo)
+        if (isDesktopSplitSelection) {
+            taskSelected = true
+            desktopSplitResultSent = true
+            val resultData =
+                Bundle().apply {
+                    putParcelable(EXTRA_DESKTOP_SPLIT_SELECTED_INTENT, intent)
+                    putParcelable(
+                        EXTRA_DESKTOP_SPLIT_SELECTED_USER,
+                        currentListAdapter.userHandle,
+                    )
+                }
+            desktopSplitResultReceiver?.send(RESULT_OK, resultData)
+            finish()
+            return
+        }
 
         val launchCookie = LaunchCookie("media_projection_launch_token")
         val activityOptions = ActivityOptions.makeBasic()
@@ -217,7 +233,7 @@ class MediaProjectionAppSelectorActivity(
         component.lifecycleObservers.forEach { lifecycle.removeObserver(it) }
         // onDestroy is also called when an app is selected, in that case we only want to send
         // RECORD_CONTENT_TASK but not RECORD_CANCEL
-        if (!taskSelected) {
+        if (!taskSelected && !isDesktopSplitSelection) {
             // TODO(b/272010156): Return result to PermissionActivity and update service there
             MediaProjectionServiceHelper.setReviewedConsentIfNeeded(
                 RECORD_CANCEL,
@@ -232,6 +248,14 @@ class MediaProjectionAppSelectorActivity(
         activityLauncher.destroy()
         controller.destroy()
         super.onDestroy()
+    }
+
+    override fun finish() {
+        if (isDesktopSplitSelection && !desktopSplitResultSent) {
+            desktopSplitResultSent = true
+            desktopSplitResultReceiver?.send(RESULT_CANCELED, Bundle.EMPTY)
+        }
+        super.finish()
     }
 
     override fun onActivityStarted(cti: TargetInfo) {
@@ -289,7 +313,9 @@ class MediaProjectionAppSelectorActivity(
     override fun shouldGetOnlyDefaultActivities() = false
 
     override fun shouldShowContentPreview() =
-        if (hasWorkProfile()) {
+        if (isDesktopSplitSelection) {
+            false
+        } else if (hasWorkProfile()) {
             // When the user has a work profile, we can always set this to true, and the layout is
             // adjusted automatically, and hide the recents view.
             true
@@ -380,7 +406,9 @@ class MediaProjectionAppSelectorActivity(
     @get:StringRes
     private val titleResId: Int
         get() =
-            when (screenShareType) {
+            if (isDesktopSplitSelection) {
+                R.string.desktop_split_app_selector_title
+            } else when (screenShareType) {
                 ScreenShareType.ShareToApp ->
                     R.string.media_projection_entry_share_app_selector_title
                 ScreenShareType.SystemCast ->
@@ -409,6 +437,13 @@ class MediaProjectionAppSelectorActivity(
 
     companion object {
         const val TAG = "MediaProjectionAppSelectorActivity"
+        private const val ACTION_SELECT_APP_FOR_DESKTOP_SPLIT =
+            "com.android.systemui.action.SELECT_APP_FOR_DESKTOP_SPLIT"
+        private const val EXTRA_DESKTOP_SPLIT_RESULT_RECEIVER =
+            "desktop_split_result_receiver"
+        private const val EXTRA_DESKTOP_SPLIT_SELECTED_INTENT =
+            "desktop_split_selected_intent"
+        private const val EXTRA_DESKTOP_SPLIT_SELECTED_USER = "desktop_split_selected_user"
 
         /**
          * When EXTRA_CAPTURE_REGION_RESULT_RECEIVER is passed as intent extra the activity will
@@ -436,6 +471,16 @@ class MediaProjectionAppSelectorActivity(
          */
         const val EXTRA_SCREEN_SHARE_TYPE = "screen_share_type"
     }
+
+    private val isDesktopSplitSelection: Boolean
+        get() = intent.action == ACTION_SELECT_APP_FOR_DESKTOP_SPLIT
+
+    private val desktopSplitResultReceiver: ResultReceiver?
+        get() =
+            intent.getParcelableExtra(
+                EXTRA_DESKTOP_SPLIT_RESULT_RECEIVER,
+                ResultReceiver::class.java,
+            )
 
     private fun setIcon() {
         val iconView = findViewById<ImageView>(R.id.media_projection_app_selector_icon) ?: return

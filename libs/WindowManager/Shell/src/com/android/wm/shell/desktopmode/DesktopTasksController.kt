@@ -17,6 +17,7 @@
 package com.android.wm.shell.desktopmode
 
 import android.annotation.UserIdInt
+import android.app.Activity
 import android.app.ActivityManager
 import android.app.ActivityManager.RecentTaskInfo
 import android.app.ActivityManager.RunningTaskInfo
@@ -34,6 +35,7 @@ import android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN
 import android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW
 import android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED
 import android.app.WindowConfiguration.WindowingMode
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -47,6 +49,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.RemoteException
+import android.os.ResultReceiver
+import android.os.SystemProperties
 import android.os.Trace
 import android.os.UserHandle
 import android.os.UserManager
@@ -5772,14 +5776,81 @@ class DesktopTasksController(
                 logV("Split requested for task=%d in desk=%d", taskInfo.taskId, deskId)
                 val wct = WindowContainerTransaction()
                 addMoveToSplitChanges(wct, taskInfo)
-                splitScreenController.requestEnterSplitSelect(
+                val taskPosition =
+                    if (leftOrTop) {
+                        SPLIT_POSITION_TOP_OR_LEFT
+                    } else {
+                        SPLIT_POSITION_BOTTOM_OR_RIGHT
+                    }
+                val handled = splitScreenController.requestEnterSplitSelect(
                     taskInfo,
-                    if (leftOrTop) SPLIT_POSITION_TOP_OR_LEFT else SPLIT_POSITION_BOTTOM_OR_RIGHT,
+                    taskPosition,
                     taskInfo.configuration.windowConfiguration.bounds,
                     /* startRecents = */ true,
                     /* withRecentsWct = */ wct,
                 )
+                if (!handled && canUseBstSplitAppSelector()) {
+                    logD("Using SystemUI split app selector for task=%d", taskInfo.taskId)
+                    launchBstSplitAppSelector(taskInfo, taskPosition)
+                }
             }
+        }
+    }
+
+    private fun canUseBstSplitAppSelector(): Boolean =
+        context.packageName == SYSTEM_UI_PACKAGE &&
+            SystemProperties.getInt("bst.enable_navigationbar", 0) > 0
+
+    private fun launchBstSplitAppSelector(
+        taskInfo: RunningTaskInfo,
+        taskPosition: Int,
+    ) {
+        val resultReceiver =
+            object : ResultReceiver(handler) {
+                override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
+                    if (resultCode != Activity.RESULT_OK) {
+                        logD("Desktop split app selection cancelled for task=%d", taskInfo.taskId)
+                        return
+                    }
+                    val selectedIntent =
+                        resultData?.getParcelable(
+                            EXTRA_DESKTOP_SPLIT_SELECTED_INTENT,
+                            Intent::class.java,
+                        ) ?: return
+                    val selectedUser =
+                        resultData.getParcelable(
+                            EXTRA_DESKTOP_SPLIT_SELECTED_USER,
+                            UserHandle::class.java,
+                        ) ?: UserHandle.of(taskInfo.userId)
+                    val pendingIntent =
+                        PendingIntent.getActivityAsUser(
+                            context,
+                            taskInfo.taskId,
+                            selectedIntent,
+                            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                            /* options= */ null,
+                            selectedUser,
+                    )
+                    logD("Starting desktop split for task=%d", taskInfo.taskId)
+                    splitScreenController.startIntentAndTaskForDesktop(
+                        pendingIntent,
+                        selectedUser.identifier,
+                        taskInfo.taskId,
+                        taskPosition,
+                    )
+                }
+            }
+        val selectorIntent =
+            Intent(ACTION_SELECT_APP_FOR_DESKTOP_SPLIT)
+                .setClassName(SYSTEM_UI_PACKAGE, DESKTOP_SPLIT_APP_SELECTOR_ACTIVITY)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                .putExtra(EXTRA_DESKTOP_SPLIT_RESULT_RECEIVER, resultReceiver)
+                .putExtra(EXTRA_HOST_APP_USER_HANDLE, UserHandle.of(taskInfo.userId))
+                .putExtra(EXTRA_HOST_APP_UID, taskInfo.effectiveUid)
+        try {
+            context.startActivityAsUser(selectorIntent, UserHandle.of(taskInfo.userId))
+        } catch (e: ActivityNotFoundException) {
+            logE("Unable to launch desktop split app selector for task=%d: %s", taskInfo.taskId, e)
         }
     }
 
@@ -6897,6 +6968,19 @@ class DesktopTasksController(
     }
 
     companion object {
+        private const val SYSTEM_UI_PACKAGE = "com.android.systemui"
+        private const val DESKTOP_SPLIT_APP_SELECTOR_ACTIVITY =
+            "com.android.systemui.mediaprojection.appselector.MediaProjectionAppSelectorActivity"
+        private const val ACTION_SELECT_APP_FOR_DESKTOP_SPLIT =
+            "com.android.systemui.action.SELECT_APP_FOR_DESKTOP_SPLIT"
+        private const val EXTRA_DESKTOP_SPLIT_RESULT_RECEIVER =
+            "desktop_split_result_receiver"
+        private const val EXTRA_DESKTOP_SPLIT_SELECTED_INTENT =
+            "desktop_split_selected_intent"
+        private const val EXTRA_DESKTOP_SPLIT_SELECTED_USER = "desktop_split_selected_user"
+        private const val EXTRA_HOST_APP_USER_HANDLE = "launched_from_user_handle"
+        private const val EXTRA_HOST_APP_UID = "launched_from_host_uid"
+
         // Timeout used for CUJ_DESKTOP_MODE_ENTER_APP_HANDLE_DRAG_HOLD, this is longer than the
         // default timeout to avoid timing out in the middle of a drag action.
         private val APP_HANDLE_DRAG_HOLD_CUJ_TIMEOUT_MS: Long = TimeUnit.SECONDS.toMillis(10L)

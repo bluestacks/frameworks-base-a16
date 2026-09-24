@@ -1638,6 +1638,9 @@
     <!-- Title of the activity that allows users to select an app to share or record [CHAR LIMIT=NONE] -->
     <string name="screen_share_generic_app_selector_title">Share or record an app</string>
 
+    <!-- Title shown when selecting the second app for desktop split screen. [CHAR LIMIT=NONE] -->
+    <string name="desktop_split_app_selector_title">Select an app for split screen</string>
+
     <!-- Media projection that launched from 1P/3P apps -->
     <!-- 1P/3P app media projection permission dialog title. [CHAR LIMIT=NONE] -->
     <string name="media_projection_entry_app_permission_dialog_title">Share your screen with <xliff:g id="app_seeking_permission" example="Meet">%s</xliff:g>?</string>
