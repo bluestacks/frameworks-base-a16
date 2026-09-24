@@ -25,6 +25,7 @@ import android.content.pm.ActivityInfo.CONFIG_UI_MODE
 import android.graphics.Point
 import android.graphics.Rect
 import android.os.Handler
+import android.os.SystemProperties
 import android.os.Trace
 import android.view.Display
 import android.view.MotionEvent
@@ -692,6 +693,11 @@ class AppHeaderController(
         val displayWidth = layout.width()
         val stableBounds = Rect()
         layout.getStableBounds(stableBounds)
+        if (SystemProperties.getInt("bst.enable_navigationbar_a16", 1) > 0) {
+            // The status bar is transient in BlueStacks desktop mode, so it must not constrain
+            // the final position of a dragged freeform window.
+            stableBounds.top = 0
+        }
         return Rect(
             determineMinX(leftButtonsWidth, rightButtonsWidth, requiredEmptySpace, taskWidth),
             stableBounds.top,

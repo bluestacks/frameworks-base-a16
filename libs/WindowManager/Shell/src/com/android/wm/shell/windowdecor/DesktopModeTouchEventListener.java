@@ -37,6 +37,7 @@ import android.graphics.Region;
 import android.hardware.input.InputManager;
 import android.os.IBinder;
 import android.os.SystemProperties;
+import android.util.Log;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.PointerIcon;
@@ -118,6 +119,7 @@ public class DesktopModeTouchEventListener
     private boolean mIsCustomHeaderGesture;
     private boolean mIsResizeGesture;
     private boolean mIsDragging;
+    private boolean mIsBstStatusBarGesture;
     private boolean mDragInterrupted;
     private boolean mLongClickDisabled;
     private int mDragPointerId = -1;
@@ -498,6 +500,21 @@ public class DesktopModeTouchEventListener
         debugLogD("handleFreeformMotionEvent(%s)", viewName);
         updateTouchStatus(e);
         final int id = v.getId();
+        final int actionMasked = e.getActionMasked();
+        if (actionMasked == MotionEvent.ACTION_DOWN) {
+            mIsBstStatusBarGesture = shouldReserveForBstStatusBarGesture(taskInfo, id, e);
+            if (mIsBstStatusBarGesture) {
+                Log.i(TAG, "A16DBG:bst_statusbar: reserved freeform caption top edge task="
+                        + taskInfo.taskId);
+            }
+        }
+        if (mIsBstStatusBarGesture) {
+            if (actionMasked == MotionEvent.ACTION_UP
+                    || actionMasked == MotionEvent.ACTION_CANCEL) {
+                mIsBstStatusBarGesture = false;
+            }
+            return false;
+        }
         if (mGestureDetector.onTouchEvent(e)) {
             debugLogD("handleFreeformMotionEvent(%s) handled by gesture detector", viewName);
             return true;
@@ -709,6 +726,24 @@ public class DesktopModeTouchEventListener
             }
         }
         return true;
+    }
+
+    private boolean shouldReserveForBstStatusBarGesture(
+            ActivityManager.RunningTaskInfo taskInfo, int touchedViewId, MotionEvent event) {
+        if (SystemProperties.getInt("bst.enable_navigationbar_a16", 1) <= 0
+                || !taskInfo.isFreeform()
+                || (touchedViewId != R.id.desktop_mode_caption
+                        && touchedViewId != R.id.caption_handle)) {
+            return false;
+        }
+        final int statusBarHeight = mContext.getResources().getDimensionPixelSize(
+                com.android.internal.R.dimen.status_bar_height);
+        if (event.getRawY() >= statusBarHeight) {
+            return false;
+        }
+        final Rect taskBounds = taskInfo.configuration.windowConfiguration.getBounds();
+        final Rect maxBounds = taskInfo.configuration.windowConfiguration.getMaxBounds();
+        return !maxBounds.isEmpty() && taskBounds.top == maxBounds.top;
     }
 
     private void updatePointerIcon(MotionEvent e, int dragPointerIdx, @Nullable IBinder inputToken,
