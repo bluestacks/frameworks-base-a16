@@ -5799,7 +5799,7 @@ class DesktopTasksController(
 
     private fun canUseBstSplitAppSelector(): Boolean =
         context.packageName == SYSTEM_UI_PACKAGE &&
-            SystemProperties.getInt("bst.enable_navigationbar", 0) > 0
+            SystemProperties.getInt("bst.enable_navigationbar_a16", 1) > 0
 
     private fun launchBstSplitAppSelector(
         taskInfo: RunningTaskInfo,
