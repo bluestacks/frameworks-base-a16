@@ -4448,6 +4448,14 @@ class DesktopTasksController(
         // We're in touch-first mode.
         val isAnyDeskActive = isAnyDeskActive(task.displayId, task.userId)
         logV("shouldFullscreenTaskLaunchSwitchToDesktop, isAnyDeskActive=%s", isAnyDeskActive)
+        // BS-A16: with window mode enabled, app launches always open windowed,
+        // including the first launch on a display with no active desk (which
+        // would otherwise stay fullscreen). Keep already-fullscreen tasks
+        // fullscreen on relaunch so the app-handle fullscreen choice sticks.
+        if (SystemProperties.getInt("bst.freeform_launch", 0) == 1 &&
+            !isFullscreenRelaunch(task, requestType)) {
+            return true
+        }
         return isAnyDeskActive
     }
 
