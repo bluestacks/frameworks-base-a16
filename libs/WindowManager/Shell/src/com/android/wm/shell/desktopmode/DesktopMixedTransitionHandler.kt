@@ -310,6 +310,20 @@ class DesktopMixedTransitionHandler(
         finishTransaction: SurfaceControl.Transaction,
         finishCallback: TransitionFinishCallback,
     ): Boolean {
+        // BS-A16: an app may restart its own task in a desk (e.g. Play Store
+        // after account sign-in), producing one transition with the old task
+        // closing and the new task opening. The close animation only animates
+        // the closing changes, so the opening window would never be shown and
+        // stays a black surface. Fall back to the default handler so the
+        // opening change is animated and revealed.
+        val hasOpeningDesktopTask = info.changes.any {
+            TransitionUtil.isOpeningMode(it.mode) &&
+                it.taskInfo?.windowingMode == WINDOWING_MODE_FREEFORM
+        }
+        if (hasOpeningDesktopTask) {
+            logV("Open change with close, deferring to default handler")
+            return false
+        }
         val closeChange = findCloseDesktopTaskChange(info)
         if (closeChange == null) {
             logW("Should have closing desktop task")
