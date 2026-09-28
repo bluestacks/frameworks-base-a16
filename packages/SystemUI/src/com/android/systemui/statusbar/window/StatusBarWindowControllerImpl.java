@@ -390,21 +390,10 @@ public class StatusBarWindowControllerImpl implements StatusBarWindowController 
     }
 
     private void applyHeight(State state) {
-        // BS-A16: bst.hide_statusbar=1 keeps the bar visually gone (no clock, no
-        // layout push from freeform windows) while preserving the 32px touch strip
-        // so the notification shade can still be pulled from the top edge.
-        boolean bstHideStatusBar = android.os.SystemProperties
-                .getInt("bst.hide_statusbar", 0) > 0;
-        mLpChanged.height = bstHideStatusBar ? mBarHeight * 5 / 8
-                : (state.mIsLaunchAnimationRunning
-                        ? ViewGroup.LayoutParams.MATCH_PARENT : mBarHeight);
-        if (mStatusBarWindowView != null) {
-            mStatusBarWindowView.setAlpha(bstHideStatusBar ? 0f : 1f);
-        }
+        mLpChanged.height =
+                state.mIsLaunchAnimationRunning ? ViewGroup.LayoutParams.MATCH_PARENT : mBarHeight;
         for (int rot = Surface.ROTATION_0; rot <= Surface.ROTATION_270; rot++) {
-            int height = bstHideStatusBar
-                    ? SystemBarUtils.getStatusBarHeightForRotation(mContext, rot) * 5 / 8
-                    : SystemBarUtils.getStatusBarHeightForRotation(mContext, rot);
+            int height = SystemBarUtils.getStatusBarHeightForRotation(mContext, rot);
             mLpChanged.paramsForRotation[rot].height =
                     state.mIsLaunchAnimationRunning ? ViewGroup.LayoutParams.MATCH_PARENT : height;
             // The status bar height could change at runtime if one display has a cutout while
@@ -414,7 +403,7 @@ public class StatusBarWindowControllerImpl implements StatusBarWindowController 
             InsetsFrameProvider[] providers = mLpChanged.paramsForRotation[rot].providedInsets;
             if (providers != null) {
                 for (InsetsFrameProvider provider : providers) {
-                    provider.setInsetsSize(bstHideStatusBar ? Insets.of(0, 0, 0, 0) : getInsets(height));
+                    provider.setInsetsSize(getInsets(height));
                 }
             }
         }

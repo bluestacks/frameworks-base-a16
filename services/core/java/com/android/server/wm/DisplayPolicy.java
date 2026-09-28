@@ -497,8 +497,11 @@ public class DisplayPolicy {
                 @Override
                 public void onSwipeFromTop() {
                     synchronized (mLock) {
-                        requestTransientBars(mTopGestureHost,
-                                getControllableInsets(mTopGestureHost).top > 0);
+                        final WindowState swipeTarget = mTopGestureHost != null
+                                ? mTopGestureHost
+                                : mBstStatusBarAutoHidden ? mStatusBar : null;
+                        requestTransientBars(swipeTarget, swipeTarget != null
+                                && getControllableInsets(swipeTarget).top > 0);
                     }
                 }
 
@@ -2448,6 +2451,12 @@ public class DisplayPolicy {
         mStatusBarManagerInternal.confirmImmersivePrompt();
     }
 
+    private boolean mBstStatusBarAutoHidden;
+
+    private boolean isBstDesktopModeEnabled() {
+        return SystemProperties.getInt("bst.enable_navigationbar_a16", 1) > 0;
+    }
+
     boolean isKeyguardShowing() {
         return mService.mPolicy.isKeyguardShowing();
     }
@@ -2771,6 +2780,10 @@ public class DisplayPolicy {
                                 .getTopRootTaskInWindowingMode(WINDOWING_MODE_FREEFORM);
         final boolean freeformRootTaskVisible = topFreeformTask != null
                 && topFreeformTask.isVisible();
+        final Task topVisibleAppTask = defaultTaskDisplayArea.getTask(task ->
+                task.isVisible()
+                        && task.hasFillingContent()
+                        && task.isActivityTypeStandardOrUndefined());
         final boolean inNonFullscreenFreeformMode = freeformRootTaskVisible
                 && !topFreeformTask.getBounds().equals(mDisplayContent.getBounds());
         // Always show status/nav bar for non-fullscreen multi window (excluding PiP).
@@ -2778,11 +2791,20 @@ public class DisplayPolicy {
                 || (DesktopModeFlags.ENABLE_FULLY_IMMERSIVE_IN_DESKTOP.isTrue()
                 ? inNonFullscreenFreeformMode : freeformRootTaskVisible);
 
+        final boolean autoHideBstStatusBar = isBstDesktopModeEnabled()
+                && topVisibleAppTask != null;
+        final int forciblyHidingInsetsTypes = mHidingPermanentInsetsTypes
+                | (autoHideBstStatusBar ? Type.statusBars() : 0);
         getInsetsPolicy().updateSystemBars(
                 win,
                 mShowingPermanentInsetsTypes,
-                mHidingPermanentInsetsTypes,
+                forciblyHidingInsetsTypes,
                 showSystemBarsByLegacyPolicy);
+        if (mBstStatusBarAutoHidden != autoHideBstStatusBar) {
+            mBstStatusBarAutoHidden = autoHideBstStatusBar;
+            Slog.i(TAG, "A16DBG:bst_statusbar: app auto-hide="
+                    + autoHideBstStatusBar);
+        }
 
         final boolean topAppHidesStatusBar = topAppHidesSystemBar(Type.statusBars());
         if (getStatusBar() != null) {

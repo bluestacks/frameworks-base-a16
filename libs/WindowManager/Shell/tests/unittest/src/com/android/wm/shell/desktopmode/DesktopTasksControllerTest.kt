@@ -10048,6 +10048,16 @@ class DesktopTasksControllerTest(flags: FlagsParameterization) : ShellTestCase()
     }
 
     @Test
+    fun getSnapBounds_bstDesktop_usesAutoHiddenStatusBarArea() {
+        val bounds =
+            controller.getSnapBounds(DEFAULT_DISPLAY, SnapPosition.LEFT) {
+                Rect(0, 0, 1000, 1000)
+            }
+
+        assertThat(bounds).isEqualTo(Rect(0, 0, 500, 1000))
+    }
+
+    @Test
     @DisableFlags(Flags.FLAG_ENABLE_TILE_RESIZING)
     fun snapToHalfScreen_snapBoundsWhenAlreadySnapped_animatesSurfaceWithoutWCT() {
         // Set up task to already be in snapped-left bounds

@@ -127,6 +127,7 @@ class DesktopTilingWindowDecorationTest : ShellTestCase() {
     private val jankMonitor: InteractionJankMonitor = mock()
     private lateinit var tilingDecoration: DesktopTilingWindowDecoration
     private lateinit var desktopState: FakeDesktopState
+    private var includeAutoHiddenStatusBarArea = false
 
     private val split_divider_width = 10
 
@@ -160,6 +161,12 @@ class DesktopTilingWindowDecorationTest : ShellTestCase() {
                 desktopState,
                 shellController,
                 jankMonitor,
+                desktopFreeformAreaProvider = { layout ->
+                    Rect().apply {
+                        layout.getStableBounds(this)
+                        if (includeAutoHiddenStatusBarArea) top = 0
+                    }
+                },
             )
         whenever(context.createContextAsUser(any(), any())).thenReturn(context)
         whenever(userRepositories.current).thenReturn(desktopRepository)
@@ -192,6 +199,35 @@ class DesktopTilingWindowDecorationTest : ShellTestCase() {
             val bounds = change.value.configuration.windowConfiguration.bounds
             val leftBounds = getLeftTaskBounds()
             assertRectEqual(bounds, leftBounds)
+        }
+    }
+
+    @Test
+    fun taskTiled_bstDesktop_usesAutoHiddenStatusBarArea() {
+        includeAutoHiddenStatusBarArea = true
+        val task = createVisibleTask()
+        val stableBoundsWithStatusBar = Rect(0, 32, 1000, 1000)
+        whenever(displayController.getDisplayLayout(any())).thenReturn(displayLayout)
+        whenever(displayLayout.getStableBounds(any())).thenAnswer { invocation ->
+            (invocation.arguments.first() as Rect).set(stableBoundsWithStatusBar)
+        }
+        whenever(context.resources).thenReturn(resources)
+        whenever(displayController.getDisplayContext(any())).thenReturn(context)
+        whenever(resources.getDimensionPixelSize(any())).thenReturn(split_divider_width)
+
+        tilingDecoration.onAppTiled(
+            task,
+            windowDecoration,
+            DesktopTasksController.SnapPosition.LEFT,
+            BOUNDS,
+            destinationBoundsOverride = null,
+        )
+
+        verify(toggleResizeDesktopTaskTransitionHandler)
+            .startTransition(capture(wctCaptor), any(), any())
+        for (change in wctCaptor.value.changes) {
+            val bounds = change.value.configuration.windowConfiguration.bounds
+            assertRectEqual(bounds, Rect(0, 0, 495, 1000))
         }
     }
 

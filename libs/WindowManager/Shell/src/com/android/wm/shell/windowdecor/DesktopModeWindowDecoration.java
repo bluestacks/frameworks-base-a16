@@ -61,6 +61,7 @@ import android.graphics.Rect;
 import android.graphics.Region;
 import android.net.Uri;
 import android.os.Handler;
+import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.util.Size;
@@ -1494,6 +1495,11 @@ public class DesktopModeWindowDecoration extends WindowDecoration<WindowDecorLin
         final int displayWidth = layout.width();
         final Rect stableBounds = new Rect();
         layout.getStableBounds(stableBounds);
+        if (SystemProperties.getInt("bst.enable_navigationbar_a16", 1) > 0) {
+            // The status bar is transient in BlueStacks desktop mode, so it must not constrain
+            // the final position of a dragged freeform window.
+            stableBounds.top = 0;
+        }
         return new Rect(
                 determineMinX(leftButtonsWidth, rightButtonsWidth, requiredEmptySpace,
                         taskWidth),

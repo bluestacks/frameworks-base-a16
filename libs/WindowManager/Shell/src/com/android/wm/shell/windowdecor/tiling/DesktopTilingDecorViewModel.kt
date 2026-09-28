@@ -40,6 +40,7 @@ import com.android.wm.shell.common.SyncTransactionQueue
 import com.android.wm.shell.desktopmode.DesktopModeEventLogger
 import com.android.wm.shell.desktopmode.DesktopTasksController
 import com.android.wm.shell.desktopmode.DesktopUserRepositories
+import com.android.wm.shell.desktopmode.getDesktopFreeformArea
 import com.android.wm.shell.desktopmode.ReturnToDragStartAnimator
 import com.android.wm.shell.desktopmode.ToggleResizeDesktopTaskTransitionHandler
 import com.android.wm.shell.protolog.ShellProtoLogGroup.WM_SHELL_DESKTOP_MODE
@@ -235,8 +236,8 @@ class DesktopTilingDecorViewModel(
     fun getRightSnapBoundsIfTiled(displayId: Int): Rect {
         val displayLayout = displayController.getDisplayLayout(displayId)
         val displayContext = displayController.getDisplayContext(displayId) ?: return Rect()
-        val stableBounds = Rect()
-        displayLayout?.getStableBounds(stableBounds)
+        val stableBounds =
+            displayLayout?.let { getDesktopFreeformArea(it) } ?: Rect()
         val snapBounds =
             Rect(
                 stableBounds.left +
@@ -257,8 +258,8 @@ class DesktopTilingDecorViewModel(
     fun getLeftSnapBoundsIfTiled(displayId: Int): Rect {
         val displayLayout = displayController.getDisplayLayout(displayId)
         val displayContext = displayController.getDisplayContext(displayId) ?: return Rect()
-        val stableBounds = Rect()
-        displayLayout?.getStableBounds(stableBounds)
+        val stableBounds =
+            displayLayout?.let { getDesktopFreeformArea(it) } ?: Rect()
         val snapBounds =
             Rect(
                 stableBounds.left,
