@@ -64,6 +64,8 @@ import com.android.systemui.util.settings.SecureSettings;
 import java.io.PrintWriter;
 import java.util.Optional;
 
+import java.util.concurrent.Executor;
+
 import javax.inject.Inject;
 
 /**
@@ -81,6 +83,7 @@ public class DozeParameters implements
     public static final boolean FORCE_BLANKING =
             SystemProperties.getBoolean("debug.force_blanking", false);
 
+    private final Executor mMainExecutor;
     private final AmbientDisplayConfiguration mAmbientDisplayConfiguration;
     private final PowerManager mPowerManager;
 
@@ -126,6 +129,7 @@ public class DozeParameters implements
             Context context,
             @Background Handler handler,
             @Main Resources resources,
+            @Main Executor mainExecutor,
             AmbientDisplayConfiguration ambientDisplayConfiguration,
             AlwaysOnDisplayPolicy alwaysOnDisplayPolicy,
             PowerManager powerManager,
@@ -144,6 +148,7 @@ public class DozeParameters implements
             SecureSettings secureSettings,
             Optional<MinModeManager> minModeManager) {
         mResources = resources;
+        mMainExecutor = mainExecutor;
         mAmbientDisplayConfiguration = ambientDisplayConfiguration;
         mAlwaysOnPolicy = alwaysOnDisplayPolicy;
         mBatteryController = batteryController;
@@ -155,18 +160,27 @@ public class DozeParameters implements
         mScreenOffAnimationController = screenOffAnimationController;
         mUnlockedScreenOffAnimationController = unlockedScreenOffAnimationController;
         mUserTracker = userTracker;
+        // Tunable registration is deferred to the main thread, so seed the
+        // value here to avoid a false window before the first callback lands.
+        mDozeAlwaysOn = mAmbientDisplayConfiguration.alwaysOnEnabled(
+                mUserTracker.getUserId());
         mDozeInteractor = dozeInteractor;
         mTransitionInteractor = transitionInteractor;
         mSecureSettings = secureSettings;
         mMinModeManager = minModeManager;
 
-        keyguardUpdateMonitor.registerCallback(mKeyguardVisibilityCallback);
-        tunerService.addTunable(
-                this,
-                Settings.Secure.DOZE_ALWAYS_ON,
-                Settings.Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED);
-        configurationController.addCallback(this);
-        statusBarStateController.addCallback(this);
+        // BS-A16: this class can be lazily constructed on a background thread
+        // (e.g. a doze flow's mapLatest resolving it via Dagger). These register
+        // calls assert the main thread; defer them so construction is thread-safe.
+        mMainExecutor.execute(() -> {
+            keyguardUpdateMonitor.registerCallback(mKeyguardVisibilityCallback);
+            tunerService.addTunable(
+                    this,
+                    Settings.Secure.DOZE_ALWAYS_ON,
+                    Settings.Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED);
+            configurationController.addCallback(this);
+            statusBarStateController.addCallback(this);
+        });
 
         mFoldAodAnimationController = sysUiUnfoldComponent
                 .map(SysUIUnfoldComponent::getFoldAodAnimationController).orElse(null);
