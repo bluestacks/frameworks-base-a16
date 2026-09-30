@@ -185,9 +185,8 @@ fun calculateInitialBounds(
 fun calculateMaximizeBounds(displayLayout: DisplayLayout, taskInfo: RunningTaskInfo): Rect {
     val stableBounds = Rect()
     displayLayout.getStableBounds(stableBounds)
-    // BS-A16: with the status bar hidden the top inset strip belongs to nobody;
-    // maximize should cover the full display height.
-    if (android.os.SystemProperties.getInt("bst.hide_statusbar", 0) > 0) {
+    // BS-A16: desktop mode has no status-bar inset; maximize should cover the full display height.
+    if (android.os.SystemProperties.getInt("bst.freeform_launch", 0) > 0) {
         stableBounds.top = 0
     }
     if (taskInfo.isResizeable) {
@@ -296,9 +295,8 @@ fun calculateAspectRatio(taskInfo: TaskInfo): Float {
 fun isTaskMaximized(taskInfo: RunningTaskInfo, displayLayout: DisplayLayout): Boolean {
     val stableBounds = Rect()
     displayLayout.getStableBounds(stableBounds)
-    // BS-A16: mirror calculateMaximizeBounds() which strips the hidden status
-    // bar inset, so a window maximized to the top edge is recognized as such.
-    if (android.os.SystemProperties.getInt("bst.hide_statusbar", 0) > 0) {
+    // BS-A16: mirror calculateMaximizeBounds() so a window maximized to the top edge is recognized.
+    if (android.os.SystemProperties.getInt("bst.freeform_launch", 0) > 0) {
         stableBounds.top = 0
     }
     val currentTaskBounds = taskInfo.configuration.windowConfiguration.bounds
