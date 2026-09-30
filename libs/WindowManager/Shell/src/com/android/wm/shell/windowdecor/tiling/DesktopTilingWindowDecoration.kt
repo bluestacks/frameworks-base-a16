@@ -951,6 +951,10 @@ class DesktopTilingWindowDecoration(
             displayContext.resources.getDimensionPixelSize(R.dimen.split_divider_bar_width)
         val stableBounds = Rect()
         displayLayout.getStableBounds(stableBounds)
+        // BS-A16: keep the tiling preview and divider aligned with the status-bar-free desktop.
+        if (android.os.SystemProperties.getInt("bst.freeform_launch", 0) > 0) {
+            stableBounds.top = 0
+        }
         val leftTiledTask = leftTaskResizingHelper
         val rightTiledTask = rightTaskResizingHelper
         val destinationWidth = stableBounds.width() / 2

@@ -179,11 +179,12 @@ public class DisplayPolicy {
     /** Use the transit animation in style resource (see {@link #selectAnimation}). */
     static final int ANIMATION_STYLEABLE = 0;
 
-    // BS-A16: separate from bst.enable_navigationbar (used by older Android
-    // versions) so the AOSP desktop taskbar (a TYPE_NAVIGATION_BAR window)
-    // can be enabled without affecting other images.
+    // BS-A16: desktop mode does not create the TYPE_NAVIGATION_BAR window, so the taskbar
+    // remains completely unavailable instead of being transiently revealable by a gesture.
+    // Outside desktop mode, retain the Android 16-specific property switch.
     private static final boolean BST_HIDE_NAVIGATION_BAR =
-            SystemProperties.getInt("bst.enable_navigationbar_a16", 1) == 0;
+            SystemProperties.getInt("bst.freeform_launch", 0) > 0
+                    || SystemProperties.getInt("bst.enable_navigationbar_a16", 1) == 0;
 
     private static final int SHOW_TYPES_FOR_SWIPE = Type.statusBars() | Type.navigationBars();
     private static final int SHOW_TYPES_FOR_PANIC = Type.navigationBars();

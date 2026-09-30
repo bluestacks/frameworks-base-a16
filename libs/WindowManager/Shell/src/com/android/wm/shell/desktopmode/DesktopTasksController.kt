@@ -2907,8 +2907,8 @@ class DesktopTasksController(
     private fun isMaximizedToStableBoundsEdges(displayId: Int, taskBounds: Rect): Boolean {
         val displayLayout = displayController.getDisplayLayout(displayId) ?: return false
         val stableBounds = Rect().also { displayLayout.getStableBounds(it) }
-        // BS-A16: same status bar strip as DesktopModeUtils.isTaskMaximized.
-        if (android.os.SystemProperties.getInt("bst.hide_statusbar", 0) > 0) {
+        // BS-A16: desktop mode has no status-bar inset.
+        if (android.os.SystemProperties.getInt("bst.freeform_launch", 0) > 0) {
             stableBounds.top = 0
         }
         return isTaskBoundsEqual(taskBounds, stableBounds)
@@ -3135,6 +3135,11 @@ class DesktopTasksController(
         val displayLayout = displayController.getDisplayLayout(displayId) ?: return Rect()
 
         val stableBounds = Rect().also { displayLayout.getStableBounds(it) }
+        // BS-A16: SystemUI collapses the status bar in desktop mode, but DisplayLayout can still
+        // hold the previous top stable inset while calculating a left/right snap transition.
+        if (android.os.SystemProperties.getInt("bst.freeform_launch", 0) > 0) {
+            stableBounds.top = 0
+        }
 
         val destinationWidth = stableBounds.width() / 2
         return when (position) {
