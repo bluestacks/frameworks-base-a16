@@ -344,9 +344,14 @@ static inline uint8_t ASMProbeReadByte(const void *pvByte)
 {
     /** We have verified that the compiler actually doesn't optimize this away. (intel & gcc, AMD & gcc) */
     uint8_t u8;
+#if defined(__aarch64__)
+    /* arm64: a volatile load keeps the probe-read semantics without x86 asm. */
+    u8 = *(const volatile uint8_t *)pvByte;
+#else
     __asm__ __volatile__("movb (%1), %0\n\t"
     : "=r" (u8)
     : "r" (pvByte));
+#endif
     return u8;
 }
 
@@ -785,7 +790,11 @@ static void sigaction_exception(int signal, siginfo_t *si, void *arg)
     /* We are on linux x86, the returning IP is stored in RIP (64bit) or EIP (32bit).
        In this example, the length of the offending instruction is 6 bytes.
        So we skip the offender ! */
-    #if __WORDSIZE == 64
+    #if defined(__aarch64__)
+        /* arm64: the probe load (LDRB) is a fixed 4-byte instruction. */
+        ALOGI("[%d]Caught SIGNAL(%d), addr %p, PC 0x%llx\n", getpid(), signal, si->si_addr, (unsigned long long)ctx->uc_mcontext.pc);
+        ctx->uc_mcontext.pc += 4;
+    #elif __WORDSIZE == 64
         ALOGI("[%d]Caught SIGNAL(%d), addr %p, RIP 0x%lx\n", getpid(), signal, si->si_addr, ctx->uc_mcontext.gregs[REG_RIP]);
         ctx->uc_mcontext.gregs[REG_RIP] += 2;
     #else
