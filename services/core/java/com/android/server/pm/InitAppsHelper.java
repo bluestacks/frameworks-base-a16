@@ -407,6 +407,19 @@ final class InitAppsHelper {
             throw new IllegalStateException(
                     "Failed to load frameworks package; check log for warnings");
         }
+        // Collect all BlueStacks packages and treat them as priviliged system packages.
+        final File blueStacksPrivAppDir = new File(Environment.getDataDirectory(), "priv-downloads");
+        scanDirTracedLI(blueStacksPrivAppDir, null,
+                mSystemParseFlags,
+                mSystemScanFlags | SCAN_AS_PRIVILEGED,
+                packageParser, executorService);
+
+        // Collect ordinary system packages.
+        final File blueStacksAppDir = new File(Environment.getDataDirectory(), "downloads");
+        scanDirTracedLI(blueStacksAppDir, null,
+                mSystemParseFlags,
+                mSystemScanFlags | SCAN_AS_SYSTEM,
+                packageParser, executorService);
     }
 
     @GuardedBy("mPm.mLock")

@@ -55,6 +55,9 @@ namespace VectorDrawable {
 class Tree;
 }
 
+typedef void (*JVMAttachHook)(const char* name);
+typedef void (*JVMAttachOrDetachHook)(const char* name, bool detach);
+
 namespace renderthread {
 
 class CanvasContext;
@@ -80,16 +83,23 @@ struct VsyncSource {
 class ChoreographerSource;
 class DummyVsyncSource;
 
+<<<<<<< ours
 typedef void (*JVMAttachHook)(const char* name);
 typedef void (*JVMAttachOrDetachHook)(const char* name, bool detach);
+=======
+>>>>>>> theirs
 
 class RenderThread : private ThreadBase {
     PREVENT_COPY_AND_ASSIGN(RenderThread);
 
 public:
     // Sets a callback that fires before any RenderThread setup has occurred.
+<<<<<<< ours
     static void setOnStartHook(JVMAttachHook onStartHook,
                                JVMAttachOrDetachHook onUploaderStartHook);
+=======
+    static void setOnStartHook(JVMAttachHook onStartHook, JVMAttachOrDetachHook onUploaderStartHook);
+>>>>>>> theirs
     static JVMAttachHook getOnStartHook();
 
     WorkQueue& queue() { return ThreadBase::queue(); }

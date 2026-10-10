@@ -239,7 +239,7 @@ fun createFooterActionsViewModel(
             return
         }
 
-        footerActionsInteractor.showUserSwitcher(expandable)
+        footerActionsInteractor.showUserSwitcher(context, expandable)
     }
 
     fun onSettingsButtonClicked(expandable: Expandable) {

@@ -23,7 +23,11 @@ class SkBitmap;
 
 namespace android::uirenderer {
 
+<<<<<<< ours
 using JVMAttachOrDetachHook = void (*)(const char* name, bool detach);
+=======
+typedef void (*JVMAttachOrDetachHook)(const char* name, bool detach);
+>>>>>>> theirs
 
 class HardwareBitmapUploader {
 public:

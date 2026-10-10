@@ -99,6 +99,16 @@ public:
                 [hook, detach]() { hook("GrallocUploadThread", detach); });
     }
 
+    void AttachOrDetachCurrentThread(bool detach = false){
+        auto hook = HardwareBitmapUploader::getOnJVMHook();
+        if (!mUploadThread || !hook){
+            return;
+        }
+        mUploadThread->queue().runSync([hook, detach]() {
+            hook("GrallocUploadThread", detach);
+        });
+    }
+
 protected:
     std::mutex mLock;
     sp<ThreadBase> mUploadThread = nullptr;
@@ -307,6 +317,13 @@ private:
     wp<renderthread::VulkanManager> mVulkanManagerWeak;
     std::mutex mVkLock;
 };
+
+void HardwareBitmapUploader::setOnJVMHook(JVMAttachOrDetachHook onJVMHook) {
+    gOnJVMHook = onJVMHook;
+}
+JVMAttachOrDetachHook HardwareBitmapUploader::getOnJVMHook() {
+    return gOnJVMHook;
+}
 
 static bool checkSupport(AHardwareBuffer_Format format) {
     AHardwareBuffer_Desc desc = {

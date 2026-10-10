@@ -65,7 +65,9 @@ public class ClipboardListener implements
             "com.android.systemui.SUPPRESS_CLIPBOARD_OVERLAY";
 
     private final Context mContext;
+    private final DeviceConfigProxy mDeviceConfig;
     private final Provider<ClipboardOverlayController> mOverlayProvider;
+    private final ClipboardOverlayControllerLegacyFactory mOverlayFactory;
     private final ClipboardToast mClipboardToast;
     private final UserScopedService<ClipboardManager> mClipboardManagerProvider;
     private final UserScopedService<KeyguardManager> mKeyguardManagerProvider;
@@ -89,8 +91,9 @@ public class ClipboardListener implements
     };
 
     @Inject
-    public ClipboardListener(Context context,
+    public ClipboardListener(Context context, DeviceConfigProxy deviceConfigProxy,
             Provider<ClipboardOverlayController> clipboardOverlayControllerProvider,
+            ClipboardOverlayControllerLegacyFactory overlayFactory,
             ClipboardToast clipboardToast,
             UserTracker userTracker,
             UserScopedService<ClipboardManager> clipboardManager,
@@ -99,7 +102,9 @@ public class ClipboardListener implements
             @Main Executor mainExecutor,
             ClipboardOverlaySuppressionController clipboardOverlaySuppressionController) {
         mContext = context;
+        mDeviceConfig = deviceConfigProxy;
         mOverlayProvider = clipboardOverlayControllerProvider;
+        mOverlayFactory = overlayFactory;
         mClipboardToast = clipboardToast;
         mClipboardManagerProvider = clipboardManager;
         mKeyguardManagerProvider = keyguardManager;
@@ -155,8 +160,14 @@ public class ClipboardListener implements
             return;
         }
 
-        if (mClipboardOverlay == null) {
-            mClipboardOverlay = mOverlayProvider.get();
+        boolean enabled = mFeatureFlags.isEnabled(Flags.CLIPBOARD_OVERLAY_REFACTOR);
+        if (mClipboardOverlay == null || enabled != mUsingNewOverlay) {
+            mUsingNewOverlay = enabled;
+            if (enabled) {
+                mClipboardOverlay = mOverlayProvider.get();
+            } else {
+                mClipboardOverlay = mOverlayFactory.create(mContext);
+            }
             mUiEventLogger.log(CLIPBOARD_OVERLAY_ENTERED, 0, clipSource);
         } else {
             mUiEventLogger.log(CLIPBOARD_OVERLAY_UPDATED, 0, clipSource);

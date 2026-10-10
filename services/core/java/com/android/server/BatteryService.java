@@ -739,6 +739,18 @@ public final class BatteryService extends SystemService {
     private void processValuesLocked(boolean force) {
         boolean logOutlier = false;
         long dischargeDuration = 0;
+        // fixing battery level to 100%,voltage to 5000mv(5.000V),temp to 25 degree.
+        // values changed after checking in android emulator
+        // Some chinese apps(com.hcg.cok.cn1 - clash of king)check battery level,
+        // voltage and quits if level is less than some threshold value.
+        mHealthInfo.chargerAcOnline = false;
+        mHealthInfo.batteryStatus = BatteryManager.BATTERY_STATUS_NOT_CHARGING ;
+        mHealthInfo.batteryHealth = BatteryManager.BATTERY_HEALTH_GOOD;
+        mHealthInfo.batteryLevel = 100;
+        mHealthInfo.batteryPresent = true;
+        mHealthInfo.batteryVoltageMillivolts = 5000;
+        mHealthInfo.batteryTemperatureTenthsCelsius = 250;
+        mHealthInfo.batteryTechnology = "Li-ion";
 
         // Publish a stable virtual battery profile expected by host-managed BlueStacks guests.
         mHealthInfo.chargerAcOnline = false;

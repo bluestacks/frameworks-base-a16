@@ -499,8 +499,13 @@ key PLUS {
 ### Non-printing keys ###
 
 key ESCAPE {
+<<<<<<< ours
     base:                               none
     alt:                                fallback HOME
+=======
+    base:                               fallback BACK
+    alt, meta:                          fallback HOME
+>>>>>>> theirs
     ctrl:                               fallback MENU
 }
 
