@@ -99,10 +99,13 @@ import com.android.internal.util.Preconditions;
 
 import dalvik.system.BlockGuard;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileDescriptor;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.ref.WeakReference;
@@ -140,7 +143,9 @@ import java.util.regex.Pattern;
 public class StorageManager {
     private static final String TAG = "StorageManager";
     private static final boolean LOCAL_LOGV = Log.isLoggable(TAG, Log.VERBOSE);
-    private static final String BST_PRIMARY_STORAGE_SECTORS_PATH = "/sys/block/sdb/size";
+    private static final String BST_PRIMARY_STORAGE_SECTORS_PATH =
+            SystemProperties.getInt("bst.storage.path.vdb", 1) > 0
+                ? "/sys/block/vdb/size" : "/sys/block/sdb/size";  // BS-A16 mac: HVF data disk is vdb; temp_debt unify via single prop
     private static final long BST_STORAGE_SECTOR_SIZE_BYTES = 512L;
 
     /** @hide */

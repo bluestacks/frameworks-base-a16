@@ -28,6 +28,7 @@ import android.os.Handler;
 import android.os.HandlerExecutor;
 import android.os.Looper;
 import android.os.UserManager;
+import android.os.SystemProperties;
 import android.provider.Settings;
 import android.provider.Settings.Secure;
 import android.text.TextUtils;
@@ -75,7 +76,9 @@ public class TunerServiceImpl extends TunerService {
     private static final String[] RESET_EXCEPTION_LIST = new String[] {
             QSHost.TILES_SETTING,
             Settings.Secure.DOZE_ALWAYS_ON,
-            Settings.Secure.MEDIA_CONTROLS_RESUME
+            Settings.Secure.MEDIA_CONTROLS_RESUME,
+            Settings.Secure.MEDIA_CONTROLS_RECOMMENDATION,
+            StatusBarIconController.ICON_HIDE_LIST
     };
 
     private final Observer mObserver = new Observer();
@@ -132,6 +135,7 @@ public class TunerServiceImpl extends TunerService {
                 reregisterAll();
             }
         };
+        initIconHideList();
         mUserTracker.addCallback(mCurrentUserTracker,
                 new HandlerExecutor(mainHandler));
         initializeIconHideList();
@@ -170,9 +174,12 @@ public class TunerServiceImpl extends TunerService {
         setValue(TUNER_VERSION, newVersion);
     }
 
+    // BS-A16 mac port: a13-mac read the icon_black_list resource as the default
+    // hide-list (BST statusbar policy); keep polar method shape, resource-driven value.
     private void initializeIconHideList() {
+        String value = mContext.getResources().getString(R.string.icon_black_list);
         final ArraySet<String> iconHideList = StatusBarIconController.getIconHideList(
-                mContext, null);
+                mContext, value);
         Settings.Secure.putStringForUser(mContentResolver,
                 StatusBarIconController.ICON_HIDE_LIST,
                 TextUtils.join(",", iconHideList), mCurrentUser);

@@ -86,6 +86,7 @@ public abstract class WindowOrientationListener {
     private final Context mContext;
 
     private final Object mLock = new Object();
+    private static int mBstProposedRotation = 0;
 
     @Surface.Rotation
     private final int mDefaultRotation;
@@ -250,6 +251,10 @@ public abstract class WindowOrientationListener {
         }
     }
 
+    public void callOnProposedRotationChanged() {
+        onProposedRotationChanged(mBstProposedRotation);
+    }
+
     /**
      * Gets the proposed rotation.
      *
@@ -259,12 +264,15 @@ public abstract class WindowOrientationListener {
      * @return The proposed rotation, or -1 if unknown.
      */
     public int getProposedRotation() {
+        return mBstProposedRotation;
+        /*
         synchronized (mLock) {
             if (mEnabled) {
                 return mOrientationJudge.getProposedRotationLocked();
             }
             return -1;
         }
+        */
     }
 
     /**

@@ -5360,6 +5360,8 @@ class Task extends TaskFragment {
             return resumeNextFocusableActivityWhenRootTaskIsEmpty(prev, options);
         }
 
+        mTaskSupervisor.bstOnDisplayedPackageChange(topActivity.packageName, topActivity.intent.getComponent().flattenToShortString(), "");
+
         final boolean[] resumed = new boolean[1];
         final TaskFragment topFragment = topActivity.getTaskFragment();
         forAllLeafTaskFragments(f -> {
