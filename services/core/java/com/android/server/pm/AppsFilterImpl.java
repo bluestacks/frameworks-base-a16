@@ -46,6 +46,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.SigningDetails;
 import android.content.pm.UserInfo;
+import android.os.Build;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.os.SystemProperties;
@@ -430,9 +431,15 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
     /** Builder method for an AppsFilter */
     public static AppsFilterImpl create(@NonNull PackageManagerServiceInjector injector,
             @NonNull PackageManagerInternal pmInt) {
-        final boolean forceSystemAppsQueryable =
+        boolean forceSystemAppsQueryable =
                 injector.getContext().getResources()
                         .getBoolean(R.bool.config_forceSystemPackagesQueryable);
+        // Shared resource stays false for the Windows x86_64 product. The Mac
+        // guest is arm64-only and queries system packages.
+        if (!forceSystemAppsQueryable && Build.SUPPORTED_ABIS.length > 0
+                && Build.SUPPORTED_ABIS[0].startsWith("arm64")) {
+            forceSystemAppsQueryable = true;
+        }
         final FeatureConfigImpl featureConfig = new FeatureConfigImpl(pmInt, injector);
         final String[] forcedQueryablePackageNames;
         if (forceSystemAppsQueryable) {

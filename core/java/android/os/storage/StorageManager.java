@@ -140,7 +140,16 @@ import java.util.regex.Pattern;
 public class StorageManager {
     private static final String TAG = "StorageManager";
     private static final boolean LOCAL_LOGV = Log.isLoggable(TAG, Log.VERBOSE);
-    private static final String BST_PRIMARY_STORAGE_SECTORS_PATH = "/sys/block/sdb/size";
+    // x86_64 (Windows) keeps sdb. arm64 (Mac HVF) uses vdb.
+    // bst.storage.path.vdb overrides that ABI default.
+    private static final String BST_PRIMARY_STORAGE_SECTORS_PATH = bstPrimaryStorageSectorsPath();
+
+    private static String bstPrimaryStorageSectorsPath() {
+        final boolean arm64 = Build.SUPPORTED_ABIS.length > 0
+                && Build.SUPPORTED_ABIS[0].startsWith("arm64");
+        final int useVdb = SystemProperties.getInt("bst.storage.path.vdb", arm64 ? 1 : 0);
+        return useVdb > 0 ? "/sys/block/vdb/size" : "/sys/block/sdb/size";
+    }
     private static final long BST_STORAGE_SECTOR_SIZE_BYTES = 512L;
 
     /** @hide */
