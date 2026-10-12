@@ -1717,7 +1717,10 @@ public class LockPatternUtils {
         private final boolean mDefaultIsNonStrongBiometricAllowed = true;
 
         public StrongAuthTracker(Context context) {
-            this(context, Looper.myLooper());
+            // BS-A16: singletons can be lazily constructed on a looper-less background
+            // thread (displaylib per-display setup); fall back to the main looper so the
+            // callback handler is always created on a valid thread.
+            this(context, Looper.myLooper() != null ? Looper.myLooper() : Looper.getMainLooper());
         }
 
         /**
