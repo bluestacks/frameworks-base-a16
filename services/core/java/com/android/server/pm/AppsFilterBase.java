@@ -361,6 +361,17 @@ public abstract class AppsFilterBase implements AppsFilterSnapshot {
                     return false;
                 }
             }
+
+            //Allow bluestacks packages to query other apps
+            if(callingSetting != null && callingSetting instanceof PackageStateInternal) {
+                final PackageStateInternal packageState = (PackageStateInternal) callingSetting;
+                String pkgName = packageState.getPkg().getManifestPackageName();
+                if(pkgName.startsWith("gg.now.billing") ||
+                   pkgName.startsWith("com.bluestacks.") ) {
+                    return false;
+                }
+            }
+
             if (DEBUG_LOGGING || mFeatureConfig.isLoggingEnabled(callingAppId)) {
                 log(callingSetting, targetPkgSetting, "BLOCKED");
             }

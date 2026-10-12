@@ -55,6 +55,9 @@ namespace VectorDrawable {
 class Tree;
 }
 
+typedef void (*JVMAttachHook)(const char* name);
+typedef void (*JVMAttachOrDetachHook)(const char* name, bool detach);
+
 namespace renderthread {
 
 class CanvasContext;

@@ -8289,7 +8289,16 @@ public final class ViewRootImpl implements ViewParent,
 
             // Deliver the key to the view hierarchy.
             if (mView.dispatchKeyEvent(event)) {
-                return FINISH_HANDLED;
+                // BAM-324: Roblox consumes Ctrl+V before the fallback paste path.
+                // arm64 only; x86_64 keeps the existing early return.
+                if (!(Build.SUPPORTED_ABIS.length > 0
+                        && Build.SUPPORTED_ABIS[0].startsWith("arm64")
+                        && "com.roblox.client".equals(mContext.getPackageName()))) {
+                    return FINISH_HANDLED;
+                }
+                if (event.getKeyCode() == KeyEvent.KEYCODE_V && event.isCtrlPressed()) {
+                    Log.d(TAG, "A16DBG:P2:FW-VIEW BAM-324 roblox Ctrl+V fallthrough");
+                }
             }
 
             if (shouldDropInputEvent(q)) {

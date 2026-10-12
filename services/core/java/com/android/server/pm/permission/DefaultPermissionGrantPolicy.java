@@ -429,6 +429,10 @@ final class DefaultPermissionGrantPolicy {
         List<PackageInfo> packages = mContext.getPackageManager().getInstalledPackagesAsUser(
                 DEFAULT_PACKAGE_INFO_QUERY_FLAGS, UserHandle.USER_SYSTEM);
         for (PackageInfo pkg : packages) {
+            if (pkg != null && "com.bluestacks.gamecenter".equals(pkg.packageName)) {
+                grantRuntimePermissionsForSystemPackage(pm, userId, pkg, NOTIFICATION_PERMISSIONS);
+                continue;
+            }
             if (pkg == null || !pkg.applicationInfo.isSystemApp()
                     || !pkg.applicationInfo.isSignedWithPlatformKey()) {
                 continue;
