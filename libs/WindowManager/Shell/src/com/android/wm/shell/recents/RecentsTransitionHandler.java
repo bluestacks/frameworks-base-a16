@@ -117,6 +117,17 @@ public class RecentsTransitionHandler implements Transitions.TransitionHandler,
 
     private static final int CANCEL_WITH_SNAPSHOTS_FINISH_TIMEOUT_MS = 200;
 
+    /**
+     * Failsafe for an animation that never finishes. The runner (launcher) owns the finish: it
+     * binder-calls {@link RecentsController#finish} when the recents animation settles. If that
+     * call is lost, the transition stays "animating" forever, {@code DesktopTasksController}
+     * keeps skipping every request with "recents animation is running", and the desktop-mode UI
+     * appears frozen (observed on baklava64: transition #36 stayed open for 2h12m until the user
+     * pressed Recents again). This timeout force-finishes so a dropped finish can only wedge the
+     * shell for this long.
+     */
+    private static final int ANIMATION_FINISH_TIMEOUT_MS = 10_000;
+
     private final Transitions mTransitions;
     private final ShellTaskOrganizer mShellTaskOrganizer;
     private final ShellExecutor mExecutor;
@@ -580,6 +591,25 @@ public class RecentsTransitionHandler implements Transitions.TransitionHandler,
         }
 
         /**
+         * Watchdog over the whole animation lifetime (the sibling above only covers the
+         * cancel-with-snapshots path). If the runner never calls finish within
+         * {@link #ANIMATION_FINISH_TIMEOUT_MS}, force the finish to home. It is a no-op when the
+         * controller already finished ({@link #cleanUp} clears {@code mTransition} and
+         * {@code mFinishCB}) or handed the animation off ({@link #handOffAnimation} clears
+         * {@code mFinishCB}).
+         */
+        private void setupAnimationFinishOnTimeout(IBinder transitionToken) {
+            mExecutor.executeDelayed(() -> {
+                if (mTransition == transitionToken && mFinishCB != null) {
+                    Slog.w(TAG, "Recents animation didn't finish in " + ANIMATION_FINISH_TIMEOUT_MS
+                            + "ms; forcing finish, the runner likely dropped the finish call.");
+                    finishInner(true /* toHome */, false /* userLeave */, null /* finishCb */,
+                            "anim-timeout");
+                }
+            }, ANIMATION_FINISH_TIMEOUT_MS);
+        }
+
+        /**
          * Sends a cancel message to the recents animation with snapshots. Used to trigger a
          * "replace-with-screenshot" like behavior.
          */
@@ -974,6 +1004,7 @@ public class RecentsTransitionHandler implements Transitions.TransitionHandler,
                     mStateListeners.get(i).onTransitionStateChanged(TRANSITION_STATE_ANIMATING);
                 }
                 syncHostOrientationForStart();
+                setupAnimationFinishOnTimeout(mTransition);
             } catch (RemoteException e) {
                 Slog.e(TAG, "Error starting recents animation", e);
                 cancel("onAnimationStart() failed");
