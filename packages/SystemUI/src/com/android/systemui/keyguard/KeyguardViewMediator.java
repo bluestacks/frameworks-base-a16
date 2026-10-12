@@ -2814,7 +2814,11 @@ public class KeyguardViewMediator implements CoreStartable,
      * threads, any action that directly interacts with the keyguard ui should be posted to this
      * handler, rather than called directly.
      */
-    private final Handler mHandler = new Handler(Looper.myLooper(), null, true /*async*/) {
+    // BS-A16: this singleton can be first constructed on a background thread
+    // (displaylib per-display dagger setup), where Looper.myLooper() is null and
+    // Handler creation crashes. Attach to the main (policy) looper explicitly,
+    // same treatment as the StrongAuthTracker fix in KeyguardUpdateMonitor.
+    private final Handler mHandler = new Handler(Looper.getMainLooper(), null, true /*async*/) {
         @Override
         public void handleMessage(Message msg) {
             String message = "";
