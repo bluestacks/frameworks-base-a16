@@ -699,6 +699,9 @@ applications that come with the platform
         <permission name="android.permission.MANAGE_NOTIFICATIONS"/>
         <permission name="android.permission.INJECT_EVENTS"/>
         <permission name="android.permission.MANAGE_ROLE_HOLDERS"/>
+        <!-- The taskbar's open-window section reads the live task list; without this grant
+             ActivityManager.getRecentTasks() is limited to the launcher's own tasks. -->
+        <permission name="android.permission.REAL_GET_TASKS"/>
     </privapp-permissions>
 
     <privapp-permissions package="com.bluestacks.BstCommandProcessor">
