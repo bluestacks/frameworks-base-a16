@@ -24,6 +24,7 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_DREAM;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
+import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
@@ -1001,6 +1002,16 @@ class RecentTasks {
 
             // Skip remaining tasks once we reach the requested size
             if (res.size() >= maxNum) {
+                continue;
+            }
+
+            // BS-A16: an organizer-managed root with no children is desktop-windowing scaffolding
+            // (a desk or minimized-desk container whose last window closed), not user content; it
+            // otherwise accumulates and shows up as a bare "Desktop" card in recents. Real app
+            // tasks always keep at least their TaskFragment, so they never match.
+            if (task.isOrganized() && task.getChildCount() == 0
+                    && task.getWindowingMode() == WINDOWING_MODE_FREEFORM) {
+                if (DEBUG_RECENTS) Slog.d(TAG_RECENTS, "Skipping, empty desk container: " + task);
                 continue;
             }
 

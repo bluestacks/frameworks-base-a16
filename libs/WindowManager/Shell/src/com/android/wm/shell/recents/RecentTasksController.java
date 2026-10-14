@@ -646,9 +646,10 @@ public class RecentTasksController implements TaskStackListenerCallback,
     <T extends TaskInfo> ArrayList<GroupedTaskInfo> generateList(@NonNull List<T> tasks,
             String reason) {
         final boolean multipleDesktopsEnabled = mDesktopState.enableMultipleDesktops();
-        // When the multiple desktops feature is enabled, we include all desks even if they're
-        // empty.
-        final boolean shouldIncludeEmptyDesktops = multipleDesktopsEnabled;
+        // BS-A16: upstream lists every desk — empty ones included — as "Desktop" cards for the
+        // multi-desktop switcher. This product never surfaces desks as user workspaces, and empty
+        // desks accumulate behind freeform-mode launches, so only desks with tasks are listed.
+        final boolean shouldIncludeEmptyDesktops = false;
 
         initializeDesksMap(multipleDesktopsEnabled);
 
