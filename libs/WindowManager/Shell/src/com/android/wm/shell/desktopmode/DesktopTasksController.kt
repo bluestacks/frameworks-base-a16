@@ -140,6 +140,7 @@ import com.android.wm.shell.desktopmode.common.ToggleTaskSizeInteraction
 import com.android.wm.shell.desktopmode.data.DesktopDisplay
 import com.android.wm.shell.desktopmode.data.DesktopRepository
 import com.android.wm.shell.desktopmode.data.DesktopRepository.Companion.INVALID_DESK_ID
+import com.android.wm.shell.desktopmode.data.DesktopRepository.ActiveTasksListener
 import com.android.wm.shell.desktopmode.data.DesktopRepository.DeskChangeListener
 import com.android.wm.shell.desktopmode.data.DesktopRepository.VisibleTasksListener
 import com.android.wm.shell.desktopmode.data.DesktopRepositoryInitializer
@@ -357,6 +358,19 @@ class DesktopTasksController(
         shellController.addUserChangeListener(this)
         // Update the current user id again because it might be updated between init and onInit().
         updateCurrentUser(ActivityManager.getCurrentUser())
+        // BS-A16: desks that lose all their tasks (finished while the desk was
+        // inactive, moved out, or minimized away) lingered as empty shells.
+        userRepositories.getProfile(shellController.currentUserId)
+            .addActiveTaskListener(
+                object : ActiveTasksListener {
+                    override fun onActiveTasksChanged(displayId: Int) {
+                        removeEmptyInactiveDesks(
+                            displayId = displayId,
+                            userId = shellController.currentUserId,
+                        )
+                    }
+                }
+            )
         transitions.addHandler(this)
         clientFullscreenRequestTransitionHandler.desktopTasksController = this
         dragToDesktopTransitionHandler.dragToDesktopStateListener = dragToDesktopStateListener
@@ -5838,6 +5852,20 @@ class DesktopTasksController(
         "Use getOrCreateDefaultDeskIdSuspending() instead",
         ReplaceWith("getOrCreateDefaultDeskIdSuspending()"),
     )
+    /** BS-A16: removes inactive desks that hold neither active nor minimized tasks. */
+    private fun removeEmptyInactiveDesks(displayId: Int, userId: Int) {
+        if (SystemProperties.getInt("bst.freeform_launch", 0) != 1) return
+        val repository = userRepositories.getProfile(userId)
+        val activeDeskId = repository.getActiveDeskId(displayId)
+        for (deskId in repository.getDeskIds(displayId)) {
+            if (deskId == activeDeskId) continue
+            if (repository.getActiveTaskIdsInDesk(deskId).isNotEmpty()) continue
+            if (repository.getMinimizedTaskIdsInDesk(deskId).isNotEmpty()) continue
+            logD("Removing empty inactive desk=%d on display=%d", deskId, displayId)
+            removeDesk(deskId = deskId, userId = userId, exitReason = ExitReason.TASK_FINISHED)
+        }
+    }
+
     private fun getOrCreateDefaultDeskId(displayId: Int, userId: Int): Int? {
         val repository = userRepositories.getProfile(userId)
         val existingDefaultDeskId = repository.getDefaultDeskId(displayId)
