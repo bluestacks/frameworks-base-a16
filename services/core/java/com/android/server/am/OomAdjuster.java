@@ -2111,9 +2111,10 @@ public abstract class OomAdjuster {
         }
 
         final int curSchedGroup = state.getCurrentSchedulingGroup();
+        // A13 kills a remove-task process once it is in the background sched group
+        // and is not executing a receiver.
         if (state.getWaitingToKill() != null && !state.getReceivers().isReceivingBroadcast()
-                && ActivityManager.isProcStateBackground(state.getCurProcState())
-                && !state.getHasStartedServices()) {
+                && state.getCurrentSchedulingGroup() == ProcessList.SCHED_GROUP_BACKGROUND) {
             state.killLocked(state.getWaitingToKill(), ApplicationExitInfo.REASON_USER_REQUESTED,
                     ApplicationExitInfo.SUBREASON_REMOVE_TASK, true);
             success = false;
