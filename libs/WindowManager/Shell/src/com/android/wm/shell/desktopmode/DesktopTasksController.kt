@@ -140,6 +140,7 @@ import com.android.wm.shell.desktopmode.common.ToggleTaskSizeInteraction
 import com.android.wm.shell.desktopmode.data.DesktopDisplay
 import com.android.wm.shell.desktopmode.data.DesktopRepository
 import com.android.wm.shell.desktopmode.data.DesktopRepository.Companion.INVALID_DESK_ID
+import com.android.wm.shell.desktopmode.data.DesktopRepository.ActiveTasksListener
 import com.android.wm.shell.desktopmode.data.DesktopRepository.DeskChangeListener
 import com.android.wm.shell.desktopmode.data.DesktopRepository.VisibleTasksListener
 import com.android.wm.shell.desktopmode.data.DesktopRepositoryInitializer
@@ -357,6 +358,19 @@ class DesktopTasksController(
         shellController.addUserChangeListener(this)
         // Update the current user id again because it might be updated between init and onInit().
         updateCurrentUser(ActivityManager.getCurrentUser())
+        // BS-A16: desks that lose all their tasks (finished while the desk was
+        // inactive, moved out, or minimized away) lingered as empty shells.
+        userRepositories.getProfile(shellController.currentUserId)
+            .addActiveTaskListener(
+                object : ActiveTasksListener {
+                    override fun onActiveTasksChanged(displayId: Int) {
+                        removeEmptyInactiveDesks(
+                            displayId = displayId,
+                            userId = shellController.currentUserId,
+                        )
+                    }
+                }
+            )
         transitions.addHandler(this)
         clientFullscreenRequestTransitionHandler.desktopTasksController = this
         dragToDesktopTransitionHandler.dragToDesktopStateListener = dragToDesktopStateListener
@@ -4207,6 +4221,12 @@ class DesktopTasksController(
             Transitions.transitTypeToString(requestType),
         )
 
+        // BS-A16: with window mode on, relaunches of known desk tasks (e.g. from
+        // the taskbar while on the home screen) must return to their desk windowed
+        // instead of being moved out to fullscreen.
+        val bstReturnKnownTaskToDesk =
+            isKnownDesktopTask && SystemProperties.getInt("bst.freeform_launch", 0) == 1
+
         val placeAsDesktopTask =
             when {
                 // If there is no desk on the target display, then it is not capable of handling
@@ -4238,14 +4258,14 @@ class DesktopTasksController(
                     } else {
                         // In touch-first mode, new tasks should be forced into desktop, while known
                         // desktop tasks should be moved outside of desktop.
-                        !isKnownDesktopTask
+                        !isKnownDesktopTask || bstReturnKnownTaskToDesk
                     }
                 // If there is some desk on target display and it's been marked as a "desktop-first"
                 // display, activate the desk and place the task in desktop windowing.
                 shouldForceEnterDesktop -> true
                 // New tasks should be forced into desktop, while known desktop tasks should be
                 // moved outside of desktop.
-                else -> !isKnownDesktopTask
+                else -> !isKnownDesktopTask || bstReturnKnownTaskToDesk
             }
 
         val placeAsFullscreenTask = !placeAsDesktopTask
@@ -4330,27 +4350,56 @@ class DesktopTasksController(
                 )
             runOnTransitStart?.invoke(transition)
             wct.reorder(task.token, true)
+            // BS-A16: when the desk activates for this single launch (a taskbar
+            // click from the home screen), only the launched task should come
+            // forward. Active tasks from every other desk are moved into this
+            // desk and minimized, consolidating all windows onto one desktop;
+            // the emptied desks are then removed by removeEmptyInactiveDesks.
+            if (SystemProperties.getInt("bst.freeform_launch", 0) == 1) {
+                for (deskId in repository.getDeskIds(targetDisplayId)) {
+                    if (deskId == targetDeskId) continue
+                    for (otherTaskId in repository.getActiveTaskIdsInDesk(deskId)) {
+                        if (otherTaskId == task.taskId) continue
+                        if (repository.isMinimizedTask(otherTaskId)) continue
+                        val otherTask = shellTaskOrganizer.getRunningTaskInfo(otherTaskId) ?: continue
+                        desksOrganizer.moveTaskToDesk(wct, targetDeskId, otherTask)
+                        desksOrganizer.minimizeTask(wct, targetDeskId, otherTask)
+                        addPendingMinimizeTransition(transition, otherTaskId, MinimizeReason.TASK_LIMIT)
+                    }
+                }
+                for (otherTaskId in repository.getActiveTaskIdsInDesk(targetDeskId)) {
+                    if (otherTaskId == task.taskId) continue
+                    if (repository.isMinimizedTask(otherTaskId)) continue
+                    val otherTask = shellTaskOrganizer.getRunningTaskInfo(otherTaskId) ?: continue
+                    desksOrganizer.minimizeTask(wct, targetDeskId, otherTask)
+                    addPendingMinimizeTransition(transition, otherTaskId, MinimizeReason.TASK_LIMIT)
+                }
+            }
         }
 
         if (desktopConfig.useDesktopOverrideDensity) {
             wct.setDensityDpi(task.token, desktopConfig.desktopDensityOverride)
         }
 
-        val bounds =
-            decideDesktopTaskPlacementBounds(
-                context,
-                recentTasksController,
-                repository,
-                shellTaskOrganizer,
-                displayController,
-                task,
-                targetDisplayId,
-                targetDeskId,
-                requestedTaskBounds,
-            )
-        if (bounds != null && bounds != task.configuration.windowConfiguration.bounds) {
-            logV("handleFreeformTaskPlacement decided placement bounds to be %s", bounds)
-            wct.setBounds(task.token, bounds)
+        // BS-A16: a known desk task returning to its desk (window mode taskbar
+        // relaunch) keeps its current geometry; don't cascade or resize it.
+        if (!bstReturnKnownTaskToDesk) {
+            val bounds =
+                decideDesktopTaskPlacementBounds(
+                    context,
+                    recentTasksController,
+                    repository,
+                    shellTaskOrganizer,
+                    displayController,
+                    task,
+                    targetDisplayId,
+                    targetDeskId,
+                    requestedTaskBounds,
+                )
+            if (bounds != null && bounds != task.configuration.windowConfiguration.bounds) {
+                logV("handleFreeformTaskPlacement decided placement bounds to be %s", bounds)
+                wct.setBounds(task.token, bounds)
+            }
         }
 
         if (bringTaskToFront) {
@@ -4540,11 +4589,21 @@ class DesktopTasksController(
         logV("shouldFullscreenTaskLaunchSwitchToDesktop, isAnyDeskActive=%s", isAnyDeskActive)
         // BS-A16: with window mode enabled, app launches always open windowed,
         // including the first launch on a display with no active desk (which
-        // would otherwise stay fullscreen). Keep already-fullscreen tasks
-        // fullscreen on relaunch so the app-handle fullscreen choice sticks.
-        if (SystemProperties.getInt("bst.freeform_launch", 0) == 1 &&
-            !isFullscreenRelaunch(task, requestType)) {
-            return true
+        // would otherwise stay fullscreen). A task the user put in fullscreen
+        // keeps relaunching fullscreen - whether it left the desk or is
+        // fullscreen-in-desk (isFullscreenRelaunch excludes the in-desk case).
+        // Tasks hidden by minimize must return to their window instead.
+        if (SystemProperties.getInt("bst.freeform_launch", 0) == 1) {
+            val minimized = userRepositories.getProfile(task.userId).isMinimizedTask(task.taskId)
+            if (task.isFullscreen && !minimized) {
+                logV(
+                    "shouldFullscreenTaskLaunchSwitchToDesktop: keeping user fullscreen taskId=%d",
+                    task.taskId)
+                return false
+            }
+            if (!isFullscreenRelaunch(task, requestType) || minimized) {
+                return true
+            }
         }
         return isAnyDeskActive
     }
@@ -5793,6 +5852,20 @@ class DesktopTasksController(
         "Use getOrCreateDefaultDeskIdSuspending() instead",
         ReplaceWith("getOrCreateDefaultDeskIdSuspending()"),
     )
+    /** BS-A16: removes inactive desks that hold neither active nor minimized tasks. */
+    private fun removeEmptyInactiveDesks(displayId: Int, userId: Int) {
+        if (SystemProperties.getInt("bst.freeform_launch", 0) != 1) return
+        val repository = userRepositories.getProfile(userId)
+        val activeDeskId = repository.getActiveDeskId(displayId)
+        for (deskId in repository.getDeskIds(displayId)) {
+            if (deskId == activeDeskId) continue
+            if (repository.getActiveTaskIdsInDesk(deskId).isNotEmpty()) continue
+            if (repository.getMinimizedTaskIdsInDesk(deskId).isNotEmpty()) continue
+            logD("Removing empty inactive desk=%d on display=%d", deskId, displayId)
+            removeDesk(deskId = deskId, userId = userId, exitReason = ExitReason.TASK_FINISHED)
+        }
+    }
+
     private fun getOrCreateDefaultDeskId(displayId: Int, userId: Int): Int? {
         val repository = userRepositories.getProfile(userId)
         val existingDefaultDeskId = repository.getDefaultDeskId(displayId)
