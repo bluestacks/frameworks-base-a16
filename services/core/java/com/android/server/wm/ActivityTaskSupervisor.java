@@ -1970,19 +1970,9 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         if (!killProcess || task.mKillProcessesOnDestroyed) {
             return;
         }
-        // Give a chance for the client to handle Activity#onStop(). The timeout waits for
-        // onDestroy because the client defers to report completion of stopped, the callback from
-        // DestroyActivityItem may be called first.
-        final ActivityRecord top = task.getTopMostActivity();
-        if (!isBstRequest && !isBstForceKill
-                && top != null && top.finishing && !top.mAppStopped && top.lastVisibleTime > 0
-                && !task.mKillProcessesOnDestroyed && top.hasProcess()) {
-            task.mKillProcessesOnDestroyed = true;
-            mHandler.sendMessageDelayed(
-                    mHandler.obtainMessage(KILL_TASK_PROCESSES_TIMEOUT_MSG, task),
-                    KILL_TASK_PROCESSES_TIMEOUT_MS);
-            return;
-        }
+        // A13 kills in this call. isBstRequest / isBstForceKill are applied in AMS so a
+        // gcall or force-kill app is killed while its task is still foreground, instead of
+        // being left on waitingToKill.
         killTaskProcessesIfPossible(task, isBstRequest, isBstForceKill);
     }
 

@@ -17214,9 +17214,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                     final WindowProcessController wpc =
                             (WindowProcessController) procsToKill.get(i);
                     final ProcessRecord pr = (ProcessRecord) wpc.mOwner;
-                    if ((ActivityManager.isProcStateBackground(pr.getSetProcState())
+                    // A13: background and not in a receiver, or a BST gcall / force-kill.
+                    // && binds before ||, so the two BST flags kill even while foreground.
+                    if (pr.getSetSchedGroup() == ProcessList.SCHED_GROUP_BACKGROUND
                             && !pr.mReceivers.isReceivingBroadcast()
-                            && !pr.getHasStartedServices())
                             || isBstRequest || isBstForceKill) {
                         pr.killLocked("remove task", ApplicationExitInfo.REASON_USER_REQUESTED,
                                 ApplicationExitInfo.SUBREASON_REMOVE_TASK, true);
