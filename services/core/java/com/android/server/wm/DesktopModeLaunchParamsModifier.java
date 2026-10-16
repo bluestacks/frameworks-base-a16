@@ -38,7 +38,6 @@ import android.app.WindowConfiguration;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.graphics.Rect;
-import android.os.SystemProperties;
 import android.window.DesktopExperienceFlags;
 import android.window.DesktopModeFlags;
 
@@ -346,24 +345,6 @@ class DesktopModeLaunchParamsModifier implements LaunchParamsModifier {
             // stable dropped it and left the task fullscreen. Returning DONE stops
             // TaskLaunchParamsModifier from dropping the rect until Shell shrinks it.
             outParams.mWindowingMode = WINDOWING_MODE_FREEFORM;
-            // BS-A16: relaunching an existing desk task (e.g. from the taskbar)
-            // must keep its current geometry; the launcher's cascade bounds are
-            // for new windows only. A task the user put in fullscreen keeps
-            // relaunching fullscreen instead of being converted to a window.
-            if (SystemProperties.getInt("bst.freeform_launch", 0) == 1
-                    && task != null
-                    && task.isAttached()) {
-                if (task.inFreeformWindowingMode() && !task.getBounds().isEmpty()) {
-                    outParams.mBounds.set(task.getBounds());
-                    appendLog("freeform-from-options-keep-bounds");
-                    return RESULT_DONE;
-                }
-                if (task.getWindowingMode() == WINDOWING_MODE_FULLSCREEN) {
-                    outParams.mWindowingMode = WINDOWING_MODE_FULLSCREEN;
-                    appendLog("freeform-from-options-keep-fullscreen");
-                    return RESULT_DONE;
-                }
-            }
             appendLog("freeform-from-options");
             return RESULT_DONE;
         }
@@ -422,18 +403,6 @@ class DesktopModeLaunchParamsModifier implements LaunchParamsModifier {
         //  will force the device into desktop mode.
         final Task visibleFreeformTask = task.getDisplayContent().getTask(
                 t -> t.inFreeformWindowingMode() && t.isVisibleRequested());
-        // BS-A16: with window mode on, every app launch must enter desktop so it
-        // opens windowed, including launches from the home screen where no freeform
-        // task is visible (first launch after boot and taskbar relaunches). A task
-        // the user already put in fullscreen (maximize), or a launch that explicitly
-        // requests fullscreen, must keep relaunching fullscreen instead of being
-        // pulled back into a window.
-        if (SystemProperties.getInt("bst.freeform_launch", 0) == 1
-                && (task == null || task.getWindowingMode() != WINDOWING_MODE_FULLSCREEN)
-                && (options == null
-                        || options.getLaunchWindowingMode() != WINDOWING_MODE_FULLSCREEN)) {
-            return true;
-        }
         return visibleFreeformTask != null;
     }
 
@@ -441,12 +410,6 @@ class DesktopModeLaunchParamsModifier implements LaunchParamsModifier {
             @Nullable Task task,
             @Nullable ActivityOptions options,
             @NonNull LaunchParamsController.LaunchParams currentParams) {
-        // BS-A16: launcher launch bounds are a freeform request, except when the
-        // existing task is fullscreen - that is a fullscreen relaunch (maximize
-        // choice) and must stay fullscreen.
-        if (task != null && task.getWindowingMode() == WINDOWING_MODE_FULLSCREEN) {
-            return false;
-        }
         return (task != null && task.inFreeformWindowingMode())
                 || (options != null && options.getLaunchWindowingMode() == WINDOWING_MODE_FREEFORM)
                 || hasLaunchBoundsRequest(options)
