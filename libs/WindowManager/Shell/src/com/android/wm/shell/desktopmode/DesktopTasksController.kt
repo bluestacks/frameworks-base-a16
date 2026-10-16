@@ -358,26 +358,15 @@ class DesktopTasksController(
         shellController.addUserChangeListener(this)
         // Update the current user id again because it might be updated between init and onInit().
         updateCurrentUser(ActivityManager.getCurrentUser())
-        val userId = shellController.currentUserId
         // BS-A16: desks that lose all their tasks (finished while the desk was
         // inactive, moved out, or minimized away) lingered as empty shells.
-        // Sweep on a delay: task membership churns mid-transition (a desk about
-        // to activate can look empty for a moment), and removing it then crashes
-        // DesksTransitionObserver.setActiveDesk.
         userRepositories.getProfile(shellController.currentUserId)
             .addActiveTaskListener(
                 object : ActiveTasksListener {
                     override fun onActiveTasksChanged(displayId: Int) {
-                        mainExecutor.executeDelayed(
-                            {
-                                if (shellController.currentUserId == userId) {
-                                    removeEmptyInactiveDesks(
-                                        displayId = displayId,
-                                        userId = userId,
-                                    )
-                                }
-                            },
-                            1000L,
+                        removeEmptyInactiveDesks(
+                            displayId = displayId,
+                            userId = shellController.currentUserId,
                         )
                     }
                 }
@@ -4407,34 +4396,6 @@ class DesktopTasksController(
                     targetDeskId,
                     requestedTaskBounds,
                 )
-            if (bounds != null) {
-                // BS-A16: a fresh window arriving exactly at the desk's stable
-                // bounds is a stale geometry inheritance, not a user choice -
-                // give it the standard desktop window size instead of a
-                // near-fullscreen slab. User-maximized tasks keep their bounds
-                // (the relaunch path above skips bounds entirely).
-                val stable = Rect()
-                displayController.getDisplayLayout(targetDisplayId)
-                    ?.getStableBoundsForDesktopMode(stable)
-                if (SystemProperties.getInt("bst.freeform_launch", 0) == 1 &&
-                    !stable.isEmpty &&
-                    bounds.width() == stable.width() &&
-                    bounds.height() == stable.height()) {
-                    val w = stable.width() * 72 / 100
-                    val h = stable.height() * 72 / 100
-                    bounds.set(
-                        stable.centerX() - w / 2,
-                        stable.centerY() - h / 2,
-                        stable.centerX() + w / 2,
-                        stable.centerY() + h / 2,
-                    )
-                    logV(
-                        "handleFreeformTaskPlacement normalizing stale stable " +
-                            "bounds to %s",
-                        bounds,
-                    )
-                }
-            }
             if (bounds != null && bounds != task.configuration.windowConfiguration.bounds) {
                 logV("handleFreeformTaskPlacement decided placement bounds to be %s", bounds)
                 wct.setBounds(task.token, bounds)
