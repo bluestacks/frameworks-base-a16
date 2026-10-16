@@ -32,6 +32,7 @@ import android.media.MediaMetadata;
 import android.media.session.PlaybackState;
 import android.net.Uri;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Trace;
 import android.provider.Settings;
 import android.service.notification.ZenModeConfig;
@@ -331,6 +332,14 @@ public class KeyguardSliceProvider extends SliceProvider implements
     private boolean ensureStarted() {
         if (mStarted) {
             return true;
+        }
+        // onBindSlice can be called on SysUiBg (slice_manager_binder_call_background).
+        // registerClockUpdate → KeyguardUpdateMonitor.registerCallback asserts main thread.
+        // Post the whole initialization to main; the first bind returns null and the next
+        // dozeTimeTick picks up the started instance.
+        if (Thread.currentThread() != Looper.getMainLooper().getThread()) {
+            mHandler.post(this::ensureStarted);
+            return false;
         }
         synchronized (this) {
             if (mStarted) {
