@@ -17,6 +17,7 @@ package com.android.systemui.mediaprojection.appselector
 
 import android.app.ActivityOptions
 import android.app.ActivityOptions.LaunchCookie
+import android.content.ComponentName
 import android.content.Intent
 import android.content.res.Configuration
 import android.content.res.Resources
@@ -360,6 +361,24 @@ class MediaProjectionAppSelectorActivity(
             // safelyStartActivity() and finish(), which sends RESULT_CANCELED and brings that
             // activity (the default home) to the front instead of returning it for split.
             putExtra(Intent.EXTRA_AUTO_LAUNCH_SINGLE_CHOICE, false)
+            // Home, the Settings launchers and the retired bst companion apps are not split
+            // targets. The excluded components are resolved from the same query intent the
+            // chooser lists (see HIDDEN_SPLIT_PACKAGES below), so the filter only needs package
+            // names. ChooserActivity drops EXTRA_EXCLUDE_COMPONENTS from both the ranked row
+            // and the full list.
+            val excludedComponents = packageManager
+                .queryIntentActivities(queryIntent, 0)
+                .mapNotNull { resolveInfo ->
+                    val activityInfo = resolveInfo.activityInfo
+                    if (activityInfo.packageName in HIDDEN_SPLIT_PACKAGES) {
+                        ComponentName(activityInfo.packageName, activityInfo.name)
+                    } else {
+                        null
+                    }
+                }
+            if (excludedComponents.isNotEmpty()) {
+                putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, excludedComponents.toTypedArray())
+            }
         }
 
         // Update the title of the chooser
@@ -549,3 +568,17 @@ class MediaProjectionAppSelectorActivity(
         ScreenRecord,
     }
 }
+
+// POL-358: packages that must not be offered as split targets. The billing services have no
+// launcher entry and never reach the chooser; they are listed for safety. Note
+// now.gg.billing.service.apk installs as package gg.now.billing.service.
+private val HIDDEN_SPLIT_PACKAGES = setOf(
+    "com.bluestacks.polaris",
+    "com.android.settings",
+    "com.bluestacks.nowgg",
+    "com.bluestacks.billing.service",
+    "gg.now.billing.service",
+    "gg.now.billing.service2",
+    "gg.now.billing.interceptor",
+    "gg.now.accounts",
+)
