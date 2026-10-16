@@ -17,7 +17,6 @@
 package com.android.wm.shell.desktopmode.data
 
 import android.content.Context
-import android.os.SystemProperties
 import android.graphics.Rect
 import android.view.Display.DEFAULT_DISPLAY
 import android.view.Display.INVALID_DISPLAY
@@ -164,15 +163,6 @@ class DesktopRepositoryInitializerImpl(
             uniqueDisplayId = result.newUniqueDisplayId
             preserveDesk = result.preserveDesk
             transientDesk = result.transientDesk
-        }
-
-        // BS-A16: desks whose tasks are all gone linger in persistence and are
-        // recreated as empty shells at every boot. Skip and forget them.
-        if (SystemProperties.getInt("bst.freeform_launch", 0) == 1 &&
-            persistentDesktop.zOrderedTasksList.none { persistentDesktop.tasksByTaskIdMap.containsKey(it) }) {
-            logV("desk=%d persisted without any tasks, skipping recreation", deskId)
-            persistentRepository.removeDesktop(userId, deskId)
-            return
         }
 
         val newDeskId =
